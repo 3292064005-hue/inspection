@@ -1,0 +1,7 @@
+profile_name: benchmark
+camera_overrides:
+  hz: 8.0
+station_overrides:
+  heartbeat_watchdog_sec: 5.0
+decision_overrides:
+  low_confidence_threshold: 0.2

@@ -1,0 +1,108 @@
+name: ci
+on:
+  push: null
+  pull_request: null
+
+jobs:
+  backend_fast_gate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install backend dependencies
+        run: |
+          pip install -r requirements-dev.txt -c constraints.txt
+      - name: Run backend fast gate
+        env:
+          GIT_SHA: ${{ github.sha }}
+          BUILD_ID: ${{ github.run_id }}
+          STRICT_VERIFICATION_PROVENANCE: '1'
+        run: |
+          bash scripts/run_backend_required_tests.sh
+          bash scripts/run_backend_runtime_smoke_tests.sh
+
+  backend_release_gate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install backend dependencies
+        run: |
+          pip install -r requirements-dev.txt -c constraints.txt
+      - name: Run backend release gate
+        env:
+          GIT_SHA: ${{ github.sha }}
+          BUILD_ID: ${{ github.run_id }}
+          STRICT_VERIFICATION_PROVENANCE: '1'
+        run: bash scripts/run_backend_release_gate.sh
+
+  frontend_validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install system Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+      - name: Install backend dependencies
+        run: |
+          pip install -r requirements-dev.txt -c constraints.txt
+      - name: Validate frontend + workspace checks
+        env:
+          STRICT_E2E: '1'
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE: /usr/bin/chromium
+          ENABLE_BACKEND_RELEASE_GATE: '0'
+          ENABLE_ROS_RELEASE_GATE: '0'
+          STRICT_FRONTEND_BUNDLE_BUDGET: '1'
+          FRONTEND_MAX_TOTAL_JS_KIB: '800'
+          FRONTEND_MAX_LARGEST_BUNDLE_KIB: '550'
+          GIT_SHA: ${{ github.sha }}
+          BUILD_ID: ${{ github.run_id }}
+        run: bash scripts/validate_workspace.sh
+
+  ros_release_gate:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ROS build dependencies
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y python3-colcon-common-extensions python3-rosdep python3-vcstool build-essential python3-pip curl ca-certificates git
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y nodejs
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-dev.txt -c constraints.txt
+          rosdep init || true
+          rosdep update
+          rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
+      - name: Build frontend release assets
+        shell: bash
+        run: |
+          npm --prefix frontend ci --prefer-offline --no-audit --progress=false
+          npm --prefix frontend run build:real
+      - name: Run ROS release gate
+        shell: bash
+        env:
+          ENABLE_ROS_RELEASE_GATE: '1'
+          GIT_SHA: ${{ github.sha }}
+          BUILD_ID: ${{ github.run_id }}
+          STRICT_VERIFICATION_PROVENANCE: '1'
+        run: |
+          source /opt/ros/humble/setup.bash
+          bash scripts/validate_ros_workspace.sh
+          bash scripts/run_ros2_humble_runtime_validation.sh

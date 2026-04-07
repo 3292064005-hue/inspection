@@ -1,0 +1,16 @@
+builtin_interfaces/Time stamp
+string batch_id
+int32 item_id
+string recipe_id
+bool valid
+string category
+string defect_type
+float32 score
+string qr_text
+bool qr_ok
+bool orientation_ok
+string color_name
+float32 color_ratio
+string image_path
+string annotated_image_path
+string detail_json

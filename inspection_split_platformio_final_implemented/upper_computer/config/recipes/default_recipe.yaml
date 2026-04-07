@@ -1,0 +1,88 @@
+recipe_id: block_red_v7
+version: 7
+metadata:
+  author: OpenAI
+  notes: V7 recipe with runtime context, session-aware bridge, pipeline-ready vision, and regression tooling.
+  supported_profiles: [production, debug, benchmark, maintenance, simulation]
+vision:
+  quality:
+    min_brightness: 25.0
+    max_brightness: 245.0
+    min_blur_variance: 15.0
+  color:
+    enabled: true
+    roi: {x: 120, y: 80, w: 400, h: 300}
+    hsv_ranges:
+      red:
+        - [0, 80, 80, 10, 255, 255]
+        - [170, 80, 80, 179, 255, 255]
+      green:
+        - [35, 60, 60, 85, 255, 255]
+      blue:
+        - [90, 80, 80, 130, 255, 255]
+    min_ratio: 0.08
+  qr:
+    enabled: false
+    roi: {x: 180, y: 120, w: 280, h: 240}
+  shape:
+    enabled: true
+    roi: {x: 120, y: 80, w: 400, h: 300}
+    binary_thresh: 40
+    min_area: 5000
+    max_area: 150000
+    aspect_ratio_range: [1.0, 2.5]
+decision:
+  expected_color: red
+  recheck_on_qr_fail: true
+  recheck_on_quality_issue: true
+  invalid_to_recheck: false
+  low_confidence_threshold: 0.12
+decision_rules:
+  strategy: priority
+  rules:
+    - id: invalid_result
+      priority: 100
+      when:
+        valid: false
+      then:
+        decision: NG
+        reason: invalid_result
+    - id: quality_issue
+      priority: 95
+      when:
+        defect_type_contains: QUALITY
+      then:
+        decision: NG
+        reason: image_quality_issue
+    - id: explicit_defect
+      priority: 90
+      when:
+        defect_type_ne: NONE
+      then:
+        decision: NG
+        reason: explicit_defect
+    - id: wrong_color
+      priority: 80
+      when:
+        color_name_ne: red
+      then:
+        decision: NG
+        reason: wrong_color
+    - id: qr_recheck
+      priority: 70
+      when:
+        qr_ok: false
+        defect_type: NONE
+      then:
+        decision: RECHECK
+        reason: qr_fail
+    - id: pass
+      priority: 0
+      when: {}
+      then:
+        decision: OK
+        reason: pass
+sort_mapping:
+  OK: 1
+  NG: 2
+  RECHECK: 3

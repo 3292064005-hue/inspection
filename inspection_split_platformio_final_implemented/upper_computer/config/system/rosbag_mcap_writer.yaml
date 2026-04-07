@@ -1,0 +1,6 @@
+storage:
+  noChunkCRC: false
+  noAttachmentCRC: false
+  enableDataCRC: true
+  noSummaryCRC: false
+  chunkSize: 786432

@@ -1,0 +1,7 @@
+profile_name: debug
+camera_overrides:
+  hz: 3.0
+station_overrides:
+  ack_stale_timeout_sec: 8.0
+decision_overrides:
+  invalid_to_recheck: true

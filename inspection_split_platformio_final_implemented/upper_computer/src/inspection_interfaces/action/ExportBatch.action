@@ -1,0 +1,9 @@
+string batch_id
+---
+bool accepted
+string message
+string export_url
+---
+string phase
+float32 progress
+string detail_json

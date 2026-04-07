@@ -1,0 +1,30 @@
+profiles:
+  production:
+    allowed_modes: [AUTO, PAUSED]
+  debug:
+    allowed_modes: [AUTO, PAUSED, MANUAL_MODE]
+  maintenance:
+    allowed_modes: [MANUAL_MODE, PAUSED]
+  benchmark:
+    allowed_modes: [AUTO, PAUSED, BENCHMARK]
+  simulation:
+    allowed_modes: [AUTO, PAUSED, MANUAL_MODE]
+adapters:
+  mock:
+    protocol_versions: [v1, v2]
+    supports_profiles: [debug, maintenance, benchmark, simulation]
+  serial:
+    protocol_versions: [v1, v2]
+    supports_profiles: [production, debug, maintenance]
+protocol_versions:
+  v1:
+    allowed_adapters: [mock, serial]
+  v2:
+    allowed_adapters: [mock, serial]
+detectors:
+  color:
+    supported_profiles: [production, debug, benchmark, simulation]
+  qr:
+    supported_profiles: [production, debug, benchmark, simulation]
+  shape:
+    supported_profiles: [production, debug, benchmark, simulation]

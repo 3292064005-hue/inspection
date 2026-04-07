@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>inspection_decision</name>
+  <version>0.1.0</version>
+  <description>Decision engine for OK/NG/RECHECK sorting.</description>
+  <maintainer email="student@example.com">student</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>inspection_interfaces</exec_depend>
+  <exec_depend>inspection_utils</exec_depend>
+  <exec_depend>PyYAML</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+</package>

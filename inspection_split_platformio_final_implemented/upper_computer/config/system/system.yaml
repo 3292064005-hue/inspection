@@ -1,0 +1,4 @@
+run_mode: sim
+batch_id: BATCH_DEMO
+log_root: logs/runtime
+recipe_path: config/recipes/default_recipe.yaml

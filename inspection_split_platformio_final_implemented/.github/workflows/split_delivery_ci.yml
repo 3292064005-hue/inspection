@@ -1,0 +1,133 @@
+name: split-delivery-ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  upper_computer_workspace_gate:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: upper_computer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: upper_computer/frontend/package-lock.json
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+      - name: Install upper-computer dependencies
+        run: |
+          pip install -r requirements-dev.txt -c constraints.txt
+      - name: Validate split delivery environment
+        working-directory: .
+        run: |
+          python3 scripts/validate_split_environment.py --workspace-root . --mode ci --require-node
+          python3 scripts/render_split_release_manifest.py --workspace-root . --check
+          python3 scripts/validate_release_versions.py --workspace-root .
+      - name: Run upper-computer validation gates
+        env:
+          STRICT_FRONTEND_BUNDLE_BUDGET: '1'
+          FRONTEND_MAX_TOTAL_JS_KIB: '800'
+          FRONTEND_MAX_LARGEST_BUNDLE_KIB: '550'
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE: /usr/bin/chromium
+          ENABLE_BACKEND_RELEASE_GATE: '1'
+          ENABLE_ROS_RELEASE_GATE: '0'
+          STRICT_VERIFICATION_PROVENANCE: '1'
+          GIT_SHA: ${{ github.sha }}
+          BUILD_ID: ${{ github.run_id }}
+        run: |
+          bash scripts/run_backend_required_tests.sh
+          bash scripts/run_backend_runtime_smoke_tests.sh
+          bash scripts/validate_workspace.sh
+
+  upper_computer_ros_release_gate:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y python3-pip python3-colcon-common-extensions curl ca-certificates gnupg npm
+          python3 -m pip install --upgrade pip
+          pip install -r upper_computer/requirements-dev.txt -c upper_computer/constraints.txt
+      - name: Validate ROS release environment
+        run: |
+          python3 scripts/validate_split_environment.py --workspace-root . --mode release --require-node --require-colcon --expect-ros humble
+          python3 scripts/render_split_release_manifest.py --workspace-root . --check
+          python3 scripts/validate_release_versions.py --workspace-root .
+      - name: Build frontend
+        working-directory: upper_computer/frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Run ROS2 Humble workspace validation
+        working-directory: upper_computer
+        run: |
+          bash scripts/validate_ros_workspace.sh
+          bash scripts/run_ros2_humble_runtime_validation.sh
+
+  firmware_platformio_build:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        firmware_dir:
+          - firmware/stm32_station_platformio
+          - firmware/esp32s3_camera_platformio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install PlatformIO Core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install platformio
+      - name: Validate release versions
+        run: |
+          python3 scripts/validate_split_environment.py --workspace-root . --mode ci --require-platformio
+          python3 scripts/render_split_release_manifest.py --workspace-root . --check
+          python3 scripts/validate_release_versions.py --workspace-root .
+      - name: Build firmware
+        working-directory: ${{ matrix.firmware_dir }}
+        run: platformio run
+
+  firmware_contract_gate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run firmware contract tests
+        run: |
+          bash scripts/run_firmware_contract_tests.sh
+
+  split_protocol_contract_gate:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: upper_computer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install protocol-test dependencies
+        run: |
+          pip install -r requirements-dev.txt -c constraints.txt
+      - name: Validate release versions
+        working-directory: .
+        run: |
+          python3 scripts/render_split_release_manifest.py --workspace-root . --check
+          python3 scripts/validate_release_versions.py --workspace-root .
+      - name: Run protocol and split-delivery contract tests
+        run: |
+          pytest -q src/inspection_tests/test_protocol.py src/inspection_tests/test_split_delivery_release_contract.py

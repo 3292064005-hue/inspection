@@ -1,0 +1,13 @@
+bridges:
+  - id: foxglove
+    type: foxglove_bridge
+    enabled: false
+    url: ws://127.0.0.1:8765
+    topicPrefix: /inspection
+    note: Enable when foxglove_bridge is launched alongside the station.
+  - id: rosbridge
+    type: rosbridge_websocket
+    enabled: false
+    url: ws://127.0.0.1:9090
+    topicPrefix: /inspection
+    note: Enable when rosbridge_server is launched for generic ROS web clients.

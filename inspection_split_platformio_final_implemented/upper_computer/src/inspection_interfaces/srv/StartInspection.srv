@@ -1,0 +1,5 @@
+string recipe_id
+string batch_id
+---
+bool success
+string message

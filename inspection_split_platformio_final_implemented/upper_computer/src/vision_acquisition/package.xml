@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>vision_acquisition</name>
+  <version>0.1.0</version>
+  <description>Image acquisition nodes for camera or ESP32-S3 stream.</description>
+  <maintainer email="student@example.com">student</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>opencv-python</exec_depend>
+  <exec_depend>numpy</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+</package>

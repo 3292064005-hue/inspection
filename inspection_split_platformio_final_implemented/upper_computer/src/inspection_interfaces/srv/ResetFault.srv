@@ -1,0 +1,5 @@
+string operator_name
+string comment
+---
+bool success
+string message

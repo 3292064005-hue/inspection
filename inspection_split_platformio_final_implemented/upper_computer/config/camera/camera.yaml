@@ -1,0 +1,10 @@
+mock_mode: true
+camera_provider: auto
+camera_index: 0
+frame_width: 640
+frame_height: 480
+hz: 5.0
+esp32_base_url: http://192.168.4.1
+esp32_snapshot_path: /api/v1/camera/snapshot
+esp32_health_path: /api/v1/camera/health
+esp32_request_timeout_ms: 1200.0

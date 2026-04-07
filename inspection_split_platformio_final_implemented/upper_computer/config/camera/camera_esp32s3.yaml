@@ -1,0 +1,15 @@
+mock_mode: false
+camera_provider: esp32_http
+camera_index: 0
+frame_width: 640
+frame_height: 480
+hz: 5.0
+max_reconnect_attempts: 1
+reconnect_backoff_sec: 0.05
+stale_frame_threshold_ms: 1000.0
+esp32_base_url: http://192.168.4.1
+esp32_snapshot_path: /api/v1/camera/snapshot
+esp32_health_path: /api/v1/camera/health
+esp32_request_timeout_ms: 1200.0
+esp32_auth_header: X-Inspection-Token
+esp32_auth_token: ''

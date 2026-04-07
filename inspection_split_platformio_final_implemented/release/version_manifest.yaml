@@ -1,0 +1,14 @@
+schemaVersion: 1
+releaseId: inspection-split-platformio
+workspaceVersion: '0.1.0'
+protocolVersion: '1.0'
+stm32StationFirmwareVersion: stm32-station-pio-v1
+esp32CameraFirmwareVersion: esp32s3-camera-pio-v1
+platformioEnvironments:
+  stm32: bluepill_f103c8
+  esp32: esp32s3_n16r8
+environment:
+  ubuntuRelease: '22.04'
+  rosDistro: humble
+  pythonMin: '3.10'
+  nodeSupportedMajors: ['20', '22']

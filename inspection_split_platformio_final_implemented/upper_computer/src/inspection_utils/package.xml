@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>inspection_utils</name>
+  <version>0.1.0</version>
+  <description>Common utilities for inspection station.</description>
+  <maintainer email="student@example.com">student</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>PyYAML</exec_depend>
+  <exec_depend>opencv-python</exec_depend>
+  <exec_depend>numpy</exec_depend>
+</package>

@@ -1,0 +1,10 @@
+builtin_interfaces/Time stamp
+string state
+string batch_id
+int32 item_id
+bool sensor_in_position
+bool gate_busy
+bool sorter_busy
+bool estop
+string fault_code
+string detail

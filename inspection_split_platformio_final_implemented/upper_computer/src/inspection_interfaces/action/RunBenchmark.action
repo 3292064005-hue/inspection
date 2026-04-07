@@ -1,0 +1,8 @@
+string profile_name
+---
+bool accepted
+string message
+---
+string phase
+float32 progress
+string detail_json
