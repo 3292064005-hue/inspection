@@ -1,0 +1,7 @@
+diagnostic_actions:
+  cooldown_ms: 6500
+  require_maintenance_enabled: true
+  serialized_kinds:
+    - diagnostic_capture_frame
+    - diagnostic_test_lighting
+    - diagnostic_test_sort_actuator

@@ -1,0 +1,163 @@
+version: 1
+root_timeout_ms: 50
+trees:
+  startup:
+    type: selector
+    label: startup
+    children:
+      - type: sequence
+        label: healthy_start
+        children:
+          - type: condition
+            label: all_required_healthy
+            check:
+              type: bool
+              path: healthy
+          - type: action
+            label: start_auto_cycle
+            actions:
+              - action: start_auto_cycle
+      - type: action
+        label: await_health
+        actions:
+          - action: await_health
+  auto_run:
+    type: selector
+    label: auto_run
+    children:
+      - type: sequence
+        label: healthy_resume
+        children:
+          - type: condition
+            label: health_ok
+            check:
+              type: all_of
+              items:
+                - type: bool
+                  path: healthy
+                - type: equals
+                  path: overall
+                  value: OK
+          - type: action
+            label: resume
+            actions:
+              - action: resume
+                reason: diagnostics_ok
+      - type: sequence
+        label: warn_pause
+        children:
+          - type: condition
+            label: diagnostics_warn
+            check:
+              type: equals
+              path: overall
+              value: WARN
+          - type: action
+            label: pause_warn
+            actions:
+              - action: pause
+                reason: diagnostics_warn
+      - type: sequence
+        label: error_recovery
+        children:
+          - type: condition
+            label: diagnostics_error
+            check:
+              type: equals
+              path: overall
+              value: ERROR
+          - type: action
+            label: pause_recovery
+            actions:
+              - action: pause
+                reason: diagnostics_error
+              - action: request_recovery
+                reason: diagnostics_error
+      - type: action
+        label: noop
+        actions:
+          - action: noop
+            reason: auto_run_no_change
+  benchmark:
+    type: selector
+    label: benchmark
+    children:
+      - type: sequence
+        label: benchmark_run
+        children:
+          - type: condition
+            label: healthy_and_ok
+            check:
+              type: all_of
+              items:
+                - type: bool
+                  path: healthy
+                - type: equals
+                  path: level
+                  value: OK
+          - type: action
+            label: resume
+            actions:
+              - action: resume
+                reason: benchmark_run
+      - type: sequence
+        label: benchmark_unhealthy
+        children:
+          - type: condition
+            label: unhealthy
+            check:
+              type: not
+              item:
+                type: bool
+                path: healthy
+          - type: action
+            label: pause_unhealthy
+            actions:
+              - action: pause
+                reason: benchmark_requires_healthy_stack
+      - type: action
+        label: pause_degraded
+        actions:
+          - action: pause
+            reason: benchmark_diagnostics_not_ok
+  maintenance:
+    type: selector
+    label: maintenance
+    children:
+      - type: sequence
+        label: enter_manual
+        children:
+          - type: condition
+            label: mode_maintenance
+            check:
+              type: equals
+              path: mode
+              value: MAINTENANCE
+          - type: action
+            label: enter_manual
+            actions:
+              - action: enter_manual
+      - type: action
+        label: noop
+        actions:
+          - action: noop
+  recovery:
+    type: selector
+    label: recovery
+    children:
+      - type: sequence
+        label: apply_recovery_plan
+        children:
+          - type: condition
+            label: has_plan
+            check:
+              type: non_empty
+              path: plan
+          - type: action
+            label: translate_recovery
+            builder: translate_recovery_plan
+      - type: action
+        label: noop
+        actions:
+          - action: noop
+            reason: recovery_idle

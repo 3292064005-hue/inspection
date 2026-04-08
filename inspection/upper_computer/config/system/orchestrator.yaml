@@ -1,0 +1,7 @@
+inspection_orchestrator_node:
+  ros__parameters:
+    auto_recover: false
+    execute_tree_modes: ['auto_run']
+    executable_actions: ['pause', 'resume', 'reset_fault', 'enter_manual']
+    tree_config_path: config/system/orchestrator_trees.yaml
+    publish_tree_trace: true

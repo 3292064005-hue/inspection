@@ -1,0 +1,13 @@
+services:
+  inspection-workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    environment:
+      STRICT_E2E: "0"
+      INSPECTION_EXPERIMENTAL_ACTIONS_ENABLED: "0"
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE: /usr/bin/chromium
+    volumes:
+      - .:/workspace
+    command: bash scripts/validate_workspace.sh

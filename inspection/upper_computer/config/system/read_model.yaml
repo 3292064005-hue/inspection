@@ -1,0 +1,6 @@
+read_model:
+  mode: hot
+  bootstrap_repair_on_empty_db: true
+  allow_runtime_repair_on_sync_mismatch: false
+  fallback_legacy_reads: false
+  query_side_trace_refresh: disabled

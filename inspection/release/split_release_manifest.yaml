@@ -1,0 +1,27 @@
+schemaVersion: 1
+releaseId: inspection-split-platformio
+generatedFrom: release/version_manifest.yaml
+protocolVersion: v1
+components:
+  upperComputerWorkspace:
+    version: 0.1.0
+    path: upper_computer
+    verificationWorkflow: .github/workflows/split_delivery_ci.yml
+  stm32StationFirmware:
+    firmwareVersion: stm32-station-pio-v1
+    path: firmware/stm32_station_platformio
+    platformioEnvironment: bluepill_f103c8
+  esp32CameraFirmware:
+    firmwareVersion: esp32s3-camera-pio-v1
+    path: firmware/esp32s3_camera_platformio
+    platformioEnvironment: esp32s3_n16r8
+compatibilityMatrix:
+- upperComputerWorkspaceVersion: 0.1.0
+  stm32StationFirmwareVersion: stm32-station-pio-v1
+  esp32CameraFirmwareVersion: esp32s3-camera-pio-v1
+  protocolVersion: v1
+  status: supported
+notes:
+- Top-level split-delivery CI validates upper-computer workspace, ROS2 Humble runtime,
+  firmware compile gates, firmware contract tests, and protocol regressions.
+- Rendered from release/version_manifest.yaml; do not hand-edit the generated manifest.

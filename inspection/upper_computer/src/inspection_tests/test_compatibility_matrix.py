@@ -1,0 +1,63 @@
+import pytest
+
+from inspection_utils.compatibility import load_compatibility_matrix, validate_compatibility
+from inspection_utils.config import ConfigValidationError, load_compatibility_bundle, validate_runtime_bundle
+
+
+def _recipe():
+    return {
+        'recipe_id': 'r1',
+        'metadata': {'supported_profiles': ['production', 'debug']},
+        'vision': {
+            'color': {'enabled': True, 'roi': {'x': 0, 'y': 0, 'w': 10, 'h': 10}, 'hsv_ranges': {'red': [[0, 0, 0, 10, 10, 10]]}, 'min_ratio': 0.1},
+            'qr': {'enabled': False},
+            'shape': {'enabled': False},
+        },
+        'decision': {'expected_color': 'red'},
+        'sort_mapping': {'OK': 1, 'NG': 2, 'RECHECK': 3},
+    }
+
+
+def test_validate_compatibility_flags_unknown_adapter():
+    matrix = load_compatibility_matrix(None)
+    result = validate_compatibility(matrix=matrix, profile_name='production', adapter_name='unknown', protocol_version='v1')
+    assert not result['ok']
+    assert 'unknown adapter' in result['issues'][0]
+
+
+def test_validate_runtime_bundle_checks_compatibility_bundle():
+    with pytest.raises(ConfigValidationError):
+        validate_runtime_bundle(
+            _recipe(),
+            camera_cfg={'width': 100, 'height': 100},
+            station_cfg={'adapter_name': 'mock', 'protocol_version': 'v1'},
+            profile_bundle={'profile_name': 'production'},
+            compatibility_bundle=load_compatibility_bundle(),
+        )
+
+
+def test_validate_runtime_bundle_normalizes_sim_runtime_contract() -> None:
+    recipe = _recipe()
+    recipe['metadata']['supported_profiles'] = ['production', 'debug', 'simulation']
+    validated = validate_runtime_bundle(
+        recipe,
+        camera_cfg={'width': 100, 'height': 100},
+        station_cfg={'sim_mode': True},
+        profile_bundle={'profile_name': 'simulation'},
+        compatibility_bundle=load_compatibility_bundle(),
+    )
+    assert validated['metadata']['runtime_contract']['adapter_name'] == 'mock'
+    assert validated['metadata']['runtime_contract']['protocol_version'] == 'v1'
+
+
+def test_validate_runtime_bundle_rejects_effective_mock_production_pair() -> None:
+    recipe = _recipe()
+    recipe['metadata']['supported_profiles'] = ['production', 'debug', 'simulation']
+    with pytest.raises(ConfigValidationError):
+        validate_runtime_bundle(
+            recipe,
+            camera_cfg={'width': 100, 'height': 100},
+            station_cfg={'sim_mode': True},
+            profile_bundle={'profile_name': 'production'},
+            compatibility_bundle=load_compatibility_bundle(),
+        )

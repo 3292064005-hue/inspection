@@ -1,0 +1,9 @@
+profile_name: simulation
+camera_overrides:
+  hz: 5.0
+station_overrides:
+  ack_stale_timeout_sec: 6.0
+  heartbeat_watchdog_sec: 5.0
+decision_overrides:
+  invalid_to_recheck: true
+  low_confidence_threshold: 0.25
