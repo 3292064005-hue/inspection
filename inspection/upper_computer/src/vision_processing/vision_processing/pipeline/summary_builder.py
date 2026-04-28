@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from inspection_utils.models import DetectionSummary
+from inspection_utils.model_common import DetectionSummary
 from ..evidence_schema import aggregate_confidence
 from ..postprocess.consistency_checker import apply_consistency_checks
 

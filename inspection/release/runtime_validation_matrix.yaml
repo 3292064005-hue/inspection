@@ -1,0 +1,85 @@
+schemaVersion: 1
+summary:
+  objective: Establish the minimum release-time closed-loop validation matrix across
+    the upper computer, STM32 station firmware, and ESP32-S3 camera firmware.
+  requiredEvidenceRoot: release/runtime_validation_evidence
+  topicClassificationPath: upper_computer/config/system/topic_classification.yaml
+scenarios:
+- id: sim_closed_loop
+  tier: P0
+  required: true
+  hardware:
+    upperComputer: true
+    stm32: false
+    esp32s3: false
+  trigger: bash upper_computer/scripts/run_ros2_humble_runtime_validation.sh
+  expectedChecks:
+  - start_batch_closed_loop
+  - maintenance_mode_gate
+  - diagnostic_capture_frame
+  - typed_transport_bridge
+  - action_job_projection
+  failureCriteria:
+  - ros_launch_failed
+  - action_job_not_terminal
+  - diagnostics_snapshot_missing
+  requiresTopicEvidence: true
+- id: upper_computer_with_stm32
+  tier: P0
+  required: true
+  hardware:
+    upperComputer: true
+    stm32: true
+    esp32s3: false
+  trigger: ros2 launch inspection_bringup real_station.launch.py sim_mode:=false station_config_path:=config/station/station_stm32.yaml
+    action_executor_enabled:=true
+  expectedChecks:
+  - serial_handshake_capabilities
+  - supported_action_code_reject
+  - feed_sort_reset_roundtrip
+  - heartbeat_observed
+  - fault_reset_recovery
+  failureCriteria:
+  - station_protocol_contract_fault
+  - handshake_not_completed
+  - heartbeat_timeout
+- id: upper_computer_with_esp32s3
+  tier: P0
+  required: true
+  hardware:
+    upperComputer: true
+    stm32: false
+    esp32s3: true
+  trigger: ros2 launch inspection_bringup real_station.launch.py sim_mode:=false camera_config_path:=config/camera/camera_esp32s3.yaml
+    action_executor_enabled:=true
+  expectedChecks:
+  - camera_health_endpoint_ready
+  - snapshot_capture_success
+  - auth_gate_behavior
+  - reconnect_throttle_behavior
+  failureCriteria:
+  - camera_provider_unavailable
+  - snapshot_failed
+  - wifi_reconnect_unbounded
+- id: full_hardware_closed_loop
+  tier: P0
+  required: true
+  hardware:
+    upperComputer: true
+    stm32: true
+    esp32s3: true
+  trigger: ros2 launch inspection_bringup real_station.launch.py sim_mode:=false station_config_path:=config/station/station_stm32.yaml
+    camera_config_path:=config/camera/camera_esp32s3.yaml enable_gateway:=true action_executor_enabled:=true
+  expectedChecks:
+  - start_batch_closed_loop
+  - capture_process_decision_cycle
+  - sort_execution_roundtrip
+  - maintenance_mode_diagnostic_actions
+  - read_model_projection_ready
+  - reconnect_and_fault_recovery
+  failureCriteria:
+  - cycle_not_completed
+  - result_not_projected
+  - recovery_path_failed
+  - unsafe_diagnostic_execution
+  requiresTopicEvidence: true

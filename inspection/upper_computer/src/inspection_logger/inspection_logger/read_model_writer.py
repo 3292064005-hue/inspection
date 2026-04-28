@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from inspection_utils.paths import resolve_runtime_path
-from inspection_utils.read_model_projection import build_result_projection
-from inspection_utils.read_model_store import ReadModelStore
-from inspection_utils.result_identity import canonical_result_id
+from inspection_utils.io_common import resolve_runtime_path
+from inspection_utils.model_common import build_result_projection
+from inspection_utils.model_common import ReadModelStore
+from inspection_utils.model_common import canonical_result_id
 
 
 def _normalize_artifact_path(path: str | Path) -> str:

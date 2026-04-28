@@ -5,14 +5,16 @@ from functools import wraps
 from typing import Any, Callable
 
 try:  # pragma: no cover - depends on ROS runtime
-    from rclpy.lifecycle import LifecycleNode as _RuntimeNodeBase
+    from rclpy.node import Node as _StandardNodeBase
+except Exception:  # pragma: no cover
+    class _StandardNodeBase:  # type: ignore
+        pass
+
+try:  # pragma: no cover - depends on ROS runtime
+    from rclpy.lifecycle import LifecycleNode as _LifecycleNodeBase
     NATIVE_LIFECYCLE_AVAILABLE = True
 except Exception:  # pragma: no cover
-    try:
-        from rclpy.node import Node as _RuntimeNodeBase  # type: ignore
-    except Exception:  # pragma: no cover
-        class _RuntimeNodeBase:  # type: ignore
-            pass
+    _LifecycleNodeBase = _StandardNodeBase  # type: ignore[assignment]
     NATIVE_LIFECYCLE_AVAILABLE = False
 
 _CALLBACK_TO_TRANSITION = {
@@ -24,7 +26,18 @@ _CALLBACK_TO_TRANSITION = {
 }
 
 
-class InspectionRuntimeNode(_RuntimeNodeBase):
+class StandardRuntimeNode(_StandardNodeBase):
+    """Standard non-lifecycle runtime base.
+
+    Nodes that must remain outside ROS 2 lifecycle governance should inherit
+    this base instead of :class:`InspectionRuntimeNode`. The class intentionally
+    adds no lifecycle subscriptions, native lifecycle services, or compatibility
+    bridges so runtime-topology declarations stay aligned with the executable's
+    actual control surface.
+    """
+
+
+class InspectionRuntimeNode(_LifecycleNodeBase):
     """Runtime base node.
 
     When the ROS 2 lifecycle API is available, this base class becomes a real

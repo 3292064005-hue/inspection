@@ -1,8 +1,0 @@
-string calibration_profile
----
-bool accepted
-string message
----
-string phase
-float32 progress
-string detail_json

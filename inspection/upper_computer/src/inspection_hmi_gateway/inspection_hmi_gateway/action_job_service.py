@@ -12,6 +12,7 @@ from .action_execution_runtime import ActionExecutionRuntime
 from .server.responses import utc_now
 
 SUPPORTED_ACTION_KINDS = set(ACTION_CONTRACTS)
+ACTION_LOCAL_RUNTIME_ENV = 'INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED'
 
 
 def _safe_int(value: object, default: int = 0) -> int:
@@ -28,18 +29,72 @@ class ActionJobService:
     HTTP/API -> persisted job record -> Gateway ROS transport -> independent
     ``inspection_action_executor_node`` -> job updates -> metadata repository.
 
-    For unit tests or deployments where the executor node is unavailable, the
-    previous in-process execution runtime remains as a compatibility fallback.
+    In-process execution is now an explicit rollback-only compatibility path
+    guarded by ``INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED``. When neither the
+    native ROS action client nor the executor bridge can accept work, the
+    service fails closed instead of silently reintroducing an implicit runtime.
     """
 
     def __init__(self, context: Any, *, max_workers: int = 4, diagnostic_policy: DiagnosticActionPolicy | None = None) -> None:
         self.context = context
-        self.local_runtime = ActionExecutionRuntime(context, max_workers=max_workers)
+        self._max_workers = max(1, int(max_workers))
+        self._local_runtime: ActionExecutionRuntime | None = None
         self.diagnostic_policy = diagnostic_policy or load_diagnostic_action_policy()
         self._diagnostic_submit_lock = threading.Lock()
 
     def shutdown(self) -> None:
-        self.local_runtime.shutdown()
+        runtime = self._local_runtime
+        if runtime is not None:
+            runtime.shutdown()
+
+    def _get_local_runtime(self) -> ActionExecutionRuntime:
+        """Return the guarded local execution runtime, creating it lazily.
+
+        Args:
+            None.
+
+        Returns:
+            The in-process action execution runtime used only for explicit
+            rollback scenarios.
+
+        Raises:
+            No exception is intentionally raised during lazy construction.
+
+        Boundary behavior:
+            The runtime is instantiated only when the rollback transport is
+            actually selected so production processes do not keep an unused
+            worker pool alive.
+        """
+        runtime = self._local_runtime
+        if runtime is None:
+            runtime = ActionExecutionRuntime(self.context, max_workers=self._max_workers)
+            self._local_runtime = runtime
+        return runtime
+
+
+    @property
+    def local_runtime(self) -> ActionExecutionRuntime:
+        """Compatibility accessor for tests and explicit rollback tooling."""
+        return self._get_local_runtime()
+
+    def _local_runtime_enabled(self) -> bool:
+        """Return whether the guarded local runtime fallback is enabled.
+
+        Args:
+            None.
+
+        Returns:
+            ``True`` when the rollback-only local runtime is explicitly enabled.
+
+        Raises:
+            No exception is intentionally raised.
+
+        Boundary behavior:
+            The local execution runtime stays disabled by default so production
+            deployments fail closed when the canonical action transport plane is
+            unavailable.
+        """
+        return str(os.environ.get(ACTION_LOCAL_RUNTIME_ENV, '')).strip().lower() in {'1', 'true', 'yes', 'on'}
 
     def submit(self, kind: str, *, payload: dict[str, Any], actor: dict[str, Any]) -> dict[str, Any]:
         """Create a persisted action job and dispatch it to the selected runtime.
@@ -124,7 +179,9 @@ class ActionJobService:
         else:
             if self._prefer_native_action_client() or self._prefer_executor():
                 self._audit_transport_degradation('ACTION_JOB_CANCEL_FALLBACK', job_id=job_id, requested_native=self._prefer_native_action_client(), requested_executor=self._prefer_executor())
-            _flag, future = self.local_runtime.cancel(job_id)
+            if not self._local_runtime_enabled():
+                raise ActionDispatchError('cancel_action_job', 'action_transport_unavailable', '动作取消失败，统一动作执行链路当前不可用。', job_id=job_id, transport='detached')
+            _flag, future = self._get_local_runtime().cancel(job_id)
             if future is not None and future.cancel():
                 self._update(job_id, status='CANCELLED', progress=_safe_int(current.get('progress', 0), default=0), message='任务已在执行前取消。', completedAt=utc_now())
             else:
@@ -170,8 +227,16 @@ class ActionJobService:
                 requested_native=self._prefer_native_action_client(),
                 requested_executor=self._prefer_executor(),
             )
+        if not self._local_runtime_enabled():
+            raise self._fail_submission_transport(
+                record,
+                actor=actor,
+                transport='detached',
+                reason='action_transport_unavailable',
+                message='动作提交失败，统一动作执行链路当前不可用。',
+            )
         try:
-            self.local_runtime.submit(job_id, kind, payload=dict(record.get('payload', {})), actor=dict(actor), update=self._update)
+            self._get_local_runtime().submit(job_id, kind, payload=dict(record.get('payload', {})), actor=dict(actor), update=self._update)
         except Exception as exc:
             raise self._fail_submission_transport(record, actor=actor, transport='local_runtime', reason='action_transport_unavailable', message='动作提交失败，执行运行时当前不可用。', exc=exc) from exc
         return 'local_runtime'

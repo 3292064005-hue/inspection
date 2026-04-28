@@ -2,6 +2,7 @@ string trace_id
 ---
 bool accepted
 string message
+string result_json
 ---
 string phase
 float32 progress

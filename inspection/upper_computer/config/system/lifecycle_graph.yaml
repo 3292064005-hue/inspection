@@ -1,0 +1,133 @@
+runtime_nodes:
+  - name: station_bridge_node
+    stage: core_io
+    startup_order: 10
+    required: true
+    criticality: critical
+    fault_domain: io
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: device bridge must participate in startup ordering and supervisor-driven recovery.
+  - name: camera_node
+    stage: sensing
+    startup_order: 20
+    required: true
+    criticality: required
+    fault_domain: vision
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: camera transport is part of the managed acquisition pipeline and must surface health to the supervisor.
+  - name: vision_processor_node
+    stage: processing
+    startup_order: 30
+    required: true
+    criticality: required
+    fault_domain: vision
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: vision processing must gate capture/analyze flow on lifecycle activation.
+  - name: decision_node
+    stage: processing
+    startup_order: 40
+    required: true
+    criticality: required
+    fault_domain: decision
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: decision output is part of the control loop and must follow lifecycle activation ordering.
+  - name: inspection_fsm_node
+    stage: control
+    startup_order: 50
+    required: true
+    criticality: critical
+    fault_domain: decision
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: FSM owns cycle semantics and should remain transition-aware even under compatibility mode.
+  - name: inspection_logger_node
+    stage: support
+    startup_order: 60
+    required: true
+    criticality: required
+    fault_domain: quality
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: logger persists runtime evidence and read-model source data for audits and replay.
+  - name: inspection_diagnostics_node
+    stage: support
+    startup_order: 70
+    required: false
+    criticality: optional
+    fault_domain: quality
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: diagnostics publishes optional visibility state and should remain supervisor-observed.
+  - name: inspection_action_executor_node
+    stage: control
+    startup_order: 80
+    required: true
+    criticality: required
+    fault_domain: actuation
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: native_required
+    lifecycle_mode: native_service_only
+    rationale: action executor owns long-running action transport and must expose native lifecycle transitions.
+  - name: inspection_orchestrator_node
+    stage: control
+    startup_order: 90
+    required: true
+    criticality: required
+    fault_domain: actuation
+    lifecycle_managed: true
+    supervisor_monitored: true
+    governance_class: bridge_allowed
+    lifecycle_mode: managed_runtime
+    rationale: orchestrator follows supervisor mode transitions and coordinates recovery trees.
+  - name: inspection_hmi_gateway_server
+    stage: hmi
+    startup_order: 100
+    required: false
+    criticality: optional
+    fault_domain: gateway
+    lifecycle_managed: false
+    supervisor_monitored: false
+    governance_class: standard_node
+    lifecycle_mode: external_service
+    rationale: gateway is an external service process and is intentionally excluded from ROS2 lifecycle governance.
+  - name: inspection_hmi_node
+    stage: hmi
+    startup_order: 110
+    required: false
+    criticality: optional
+    fault_domain: gateway
+    lifecycle_managed: false
+    supervisor_monitored: false
+    governance_class: standard_node
+    lifecycle_mode: best_effort
+    rationale: standalone HMI shell remains a standard utility node outside lifecycle dispatch.
+  - name: inspection_supervisor_node
+    stage: control
+    startup_order: 120
+    required: true
+    criticality: critical
+    fault_domain: control
+    lifecycle_managed: false
+    supervisor_monitored: false
+    governance_class: standard_node
+    lifecycle_mode: best_effort
+    rationale: supervisor coordinates lifecycle transitions but intentionally stays outside lifecycle dispatch and managed-runtime control.

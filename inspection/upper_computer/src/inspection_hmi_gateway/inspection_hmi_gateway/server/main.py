@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from inspection_utils.paths import resolve_under_root
+from inspection_utils.io_common import resolve_under_root
 
 from .bootstrap import build_gateway_context
 from .context import set_request_id
@@ -21,7 +21,7 @@ from .responses import api_error, api_ok, utc_now
 from .dependencies import require_role
 from .runtime_assets import resolve_gateway_paths
 from .websocket_transport import handle_gateway_websocket
-from .routers import actions, auth, audit, diagnostics, exports, health, recipes, replay, results, station, telemetry
+from .routers import actions, auth, audit, diagnostics, exports, health, internal_actions, recipes, replay, results, station, telemetry
 
 
 LOGGER = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ def _cors_origins() -> list[str]:
 def _install_versioned_routers(app: FastAPI) -> None:
     for router in (health.router, auth.router, station.router, results.router, recipes.router, diagnostics.router, exports.router, replay.router, actions.router, telemetry.router, audit.router):
         app.include_router(router, prefix='/api/v1')
+    app.include_router(internal_actions.router, prefix='/api/internal')
 
 
 def create_app(
@@ -139,7 +140,10 @@ def create_app(
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
         request_id = getattr(request.state, 'request_id', '')
-        detail = exc.errors(include_url=False)
+        try:
+            detail = exc.errors(include_url=False)
+        except TypeError:
+            detail = exc.errors()
         return JSONResponse(
             status_code=422,
             content=api_error('请求参数校验失败。', code='VALIDATION_ERROR', detail=detail, status_code=422, request_id=request_id),

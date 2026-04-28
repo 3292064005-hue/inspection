@@ -26,7 +26,7 @@ if 'inspection_interfaces' not in sys.modules:
     sys.modules['inspection_interfaces'] = inspection_interfaces
     sys.modules['inspection_interfaces.srv'] = srv_module
 
-from inspection_hmi_gateway.app_facade import GatewayAppFacade
+from inspection_hmi_gateway.application_service import GatewayApplicationService
 from inspection_hmi_gateway.runtime_components import ServiceCallResult
 
 
@@ -66,7 +66,7 @@ class _RosBridge:
         return True
 
 
-def _save_recipe(app: GatewayAppFacade, recipe_id: str, *, version: str = '1.0.0') -> None:
+def _save_recipe(app: GatewayApplicationService, recipe_id: str, *, version: str = '1.0.0') -> None:
     app.save_recipe({
         'id': recipe_id,
         'name': recipe_id,
@@ -80,9 +80,9 @@ def _save_recipe(app: GatewayAppFacade, recipe_id: str, *, version: str = '1.0.0
     })
 
 
-def _build_app(tmp_path: Path) -> GatewayAppFacade:
+def _build_app(tmp_path: Path) -> GatewayApplicationService:
     bus = _EventBus()
-    app = GatewayAppFacade(event_bus=bus, log_root=tmp_path / 'logs', recipe_root=tmp_path / 'recipes')
+    app = GatewayApplicationService(event_bus=bus, log_root=tmp_path / 'logs', recipe_root=tmp_path / 'recipes')
     _save_recipe(app, 'recipe-a', version='1.2.3')
     _save_recipe(app, 'recipe-b', version='2.0.0')
     return app
@@ -156,7 +156,21 @@ def test_call_start_marks_start_requested_and_runtime_result_acknowledges_recipe
     assert app.state.guidance == '运行链已确认当前激活配方。'
 
 
-def test_reset_fault_falls_back_to_control_topic_when_service_missing(tmp_path: Path) -> None:
+def test_reset_fault_fails_closed_when_service_missing_and_topic_fallback_disabled(tmp_path: Path) -> None:
+    app = _build_app(tmp_path)
+    bridge = _RosBridge(reset_result=ServiceCallResult(False, '未找到 /inspection/reset_fault 服务。'))
+    app.bind_ros_bridge(bridge)
+
+    ok, message = app.reset_fault()
+
+    assert ok is False
+    assert message == '未找到 /inspection/reset_fault 服务，且未启用控制话题复位回退。'
+    assert bridge.controls == []
+    assert app.state.guidance == '复位服务不可用，且未启用控制话题复位回退。'
+
+
+def test_reset_fault_can_fall_back_to_control_topic_when_explicitly_enabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_RESET_TOPIC_FALLBACK_ENABLED', '1')
     app = _build_app(tmp_path)
     bridge = _RosBridge(reset_result=ServiceCallResult(False, '未找到 /inspection/reset_fault 服务。'))
     app.bind_ros_bridge(bridge)
@@ -164,9 +178,9 @@ def test_reset_fault_falls_back_to_control_topic_when_service_missing(tmp_path: 
     ok, message = app.reset_fault()
 
     assert ok is True
-    assert message == '已退回控制话题复位。'
+    assert message == '已通过控制话题执行回退复位。'
     assert bridge.controls == ['reset']
-    assert app.state.guidance == '复位服务不可用，已退回控制话题复位。'
+    assert app.state.guidance == '复位服务不可用，已通过控制话题执行回退复位。'
 
 
 

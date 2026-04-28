@@ -1,0 +1,9 @@
+bool enabled
+---
+bool accepted
+string message
+string result_json
+---
+string phase
+float32 progress
+string detail_json

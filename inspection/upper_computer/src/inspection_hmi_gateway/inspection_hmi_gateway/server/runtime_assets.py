@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from inspection_utils.paths import resolve_resource_path, resolve_runtime_path
+from inspection_utils.io_common import resolve_resource_path, resolve_runtime_path
 
 
 @dataclass(frozen=True, slots=True)

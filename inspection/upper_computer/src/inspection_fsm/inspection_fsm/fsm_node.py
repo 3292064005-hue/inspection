@@ -6,24 +6,33 @@ import rclpy
 from std_msgs.msg import String
 
 try:
-    from inspection_interfaces.msg import CaptureRequest, ControlCommand
+    from inspection_interfaces.msg import CaptureRequest, ControlCommand, FaultRaisedEvent, FsmTransitionEvent, VisionFrameAcquiredEvent
 except ImportError:  # pragma: no cover - ROS interface generation unavailable in unit-test environments
-    CaptureRequest = ControlCommand = None
+    CaptureRequest = ControlCommand = FaultRaisedEvent = FsmTransitionEvent = VisionFrameAcquiredEvent = None
 
 from inspection_interfaces.msg import CountStats, FaultEvent, InspectionResult, SortCommand, StationState
 from inspection_interfaces.srv import ResetFault, StartInspection
-from inspection_utils.control_protocol import (
+from inspection_utils.transport_common import (
     MANUAL_STEP_CAPTURE_COMMAND,
     MANUAL_STEP_FEED_COMMAND,
     MANUAL_STEP_SORT_COMMAND,
 )
-from inspection_utils.logging_tools import event_to_json
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.qos import qos_profile
-from inspection_utils.param_parsing import parameter_as_bool
-from inspection_utils.runtime_node import InspectionRuntimeNode
-from inspection_utils.typed_interfaces import assert_typed_interfaces_available
-from inspection_utils.transport_contracts import CAPTURE_REQUEST_TOPIC_TYPED, CONTROL_TOPIC_TYPED
+from inspection_utils.logging_common import event_to_json
+from inspection_utils.runtime_common import ManagedNodeMixin
+from inspection_utils.runtime_common import qos_profile
+from inspection_utils.config_common import parameter_as_bool
+from inspection_utils.runtime_common import InspectionRuntimeNode
+from inspection_utils.runtime_common import assert_typed_interfaces_available
+from inspection_utils.transport_common import CAPTURE_REQUEST_TOPIC_TYPED, CONTROL_TOPIC_TYPED
+from inspection_utils.runtime_event_contracts import (
+    FAULT_RAISED_TOPIC_TYPED,
+    FSM_TRANSITION_TOPIC_TYPED,
+    VISION_FRAME_ACQUIRED_TOPIC_TYPED,
+    populate_fault_raised_message,
+    populate_fsm_transition_message,
+    publish_dual_runtime_event,
+)
+from inspection_utils.station_common import DECISION_OUTPUT_TOPIC, SORT_REQUEST_LEGACY_TOPIC, SORT_REQUEST_TOPIC
 from .fsm_core import (
     FSMData,
     StationEvent,
@@ -40,7 +49,7 @@ from .phase_runtime import FSMPhaseRuntimeSupport
 class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
     def __init__(self) -> None:
         super().__init__('inspection_fsm_node')
-        self.declare_parameter('auto_start', True)
+        self.declare_parameter('auto_start', False)
         self.declare_parameter('feed_timeout_sec', 1.5)
         self.declare_parameter('position_timeout_sec', 3.0)
         self.declare_parameter('capture_frame_timeout_sec', 1.0)
@@ -58,6 +67,7 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.declare_parameter('auto_self_check_pass', True)
         self.declare_parameter('auto_recovery_pass', True)
         self.declare_parameter('allow_manual_mode', True)
+        self.declare_parameter('publish_legacy_sort_cmd', False)
         self.data = FSMData(phase=StationPhase.IDLE)
         self.declare_parameter('profile_name', 'production')
         self.runtime = RuntimeContext(profile_name=str(self.get_parameter('profile_name').value))
@@ -67,15 +77,20 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.feed_pub = self.create_publisher(String, '/station/feed_request', qos_profile('control'))
         self.capture_pub = self.create_publisher(String, '/inspection/capture_request', qos_profile('control'))
         self.typed_capture_pub = self.create_publisher(CaptureRequest, CAPTURE_REQUEST_TOPIC_TYPED, qos_profile('control')) if CaptureRequest is not None else None
-        self.sort_pub = self.create_publisher(SortCommand, '/station/sort_cmd', qos_profile('control'))
+        self.sort_pub = self.create_publisher(SortCommand, SORT_REQUEST_TOPIC, qos_profile('control'))
+        self.publish_legacy_sort_cmd = parameter_as_bool(self, 'publish_legacy_sort_cmd', default=False)
+        self.legacy_sort_pub = self.create_publisher(SortCommand, SORT_REQUEST_LEGACY_TOPIC, qos_profile('control')) if self.publish_legacy_sort_cmd else None
         self.reset_pub = self.create_publisher(String, '/station/reset_request', qos_profile('control'))
         self.event_pub = self.create_publisher(String, '/inspection/events', qos_profile('event'))
+        self.typed_fsm_transition_pub = self.create_publisher(FsmTransitionEvent, FSM_TRANSITION_TOPIC_TYPED, qos_profile('event')) if FsmTransitionEvent is not None else None
+        self.typed_fault_raised_pub = self.create_publisher(FaultRaisedEvent, FAULT_RAISED_TOPIC_TYPED, qos_profile('event')) if FaultRaisedEvent is not None else None
         self.count_pub = self.create_publisher(CountStats, '/station/count_stats', qos_profile('status'))
         self.fault_pub = self.create_publisher(FaultEvent, '/station/fault', qos_profile('fault'))
         self.state_sub = self.create_subscription(StationState, '/station/state', self.on_station_state, qos_profile('status'))
         self.result_sub = self.create_subscription(InspectionResult, '/inspection/result', self.on_result, qos_profile('status'))
-        self.sort_sub = self.create_subscription(SortCommand, '/station/sort_cmd', self.on_sort_seen, qos_profile('control'))
+        self.sort_sub = self.create_subscription(SortCommand, DECISION_OUTPUT_TOPIC, self.on_decision_output, qos_profile('control'))
         self.event_sub = self.create_subscription(String, '/inspection/events', self.on_event_message, qos_profile('event'))
+        self.typed_vision_event_sub = self.create_subscription(VisionFrameAcquiredEvent, VISION_FRAME_ACQUIRED_TOPIC_TYPED, self.on_typed_vision_event_message, qos_profile('event')) if VisionFrameAcquiredEvent is not None else None
         self.control_sub = self.create_subscription(String, '/inspection/control', self.on_control_message, qos_profile('control'))
         self.typed_control_sub = self.create_subscription(ControlCommand, CONTROL_TOPIC_TYPED, self.on_typed_control_message, qos_profile('control')) if ControlCommand is not None else None
         self.create_service(StartInspection, '/inspection/start', self.on_start)
@@ -89,15 +104,31 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.metrics = FsmMetricsService(self)
         self.phase_runtime = FSMPhaseRuntimeSupport(self)
         self.timer = self.create_timer(0.05, self.tick)
-        assert_typed_interfaces_available(consumer='inspection_fsm_node', symbols={'CaptureRequest': CaptureRequest, 'ControlCommand': ControlCommand})
+        assert_typed_interfaces_available(consumer='inspection_fsm_node', symbols={'CaptureRequest': CaptureRequest, 'ControlCommand': ControlCommand, 'FaultRaisedEvent': FaultRaisedEvent, 'FsmTransitionEvent': FsmTransitionEvent, 'VisionFrameAcquiredEvent': VisionFrameAcquiredEvent})
         self.setup_managed_runtime(node_name='inspection_fsm_node')
 
     def on_configure(self) -> tuple[bool, str]:
         return True, 'fsm configured'
 
     def on_activate(self) -> tuple[bool, str]:
-        if parameter_as_bool(self, 'auto_start', default=False) and self.data.phase == StationPhase.IDLE:
-            self.apply_event(StationEvent.START, 'managed_runtime_activate')
+        """Activate the FSM runtime without bypassing gateway start authority.
+
+        Returns:
+            A managed-runtime activation tuple.
+
+        Boundary behavior:
+            ``auto_start`` is treated as a legacy compatibility knob. When it is
+            enabled while no ``recipe_id``/``batch_id`` binding exists, the node
+            refuses to self-start and emits an audit event instead of inventing
+            runtime authority locally.
+        """
+        if parameter_as_bool(self, 'auto_start', default=False):
+            if self.data.phase != StationPhase.IDLE:
+                self.emit_event('fsm_autostart_ignored', reason='phase_not_idle', actual_phase=self.data.phase.value)
+            elif not str(self.data.recipe_id or '').strip() or not str(self.data.batch_id or '').strip():
+                self.emit_event('fsm_autostart_rejected', reason='missing_gateway_binding')
+            else:
+                self.apply_event(StationEvent.START, 'managed_runtime_activate')
         return True, 'fsm active'
 
     def on_deactivate(self) -> tuple[bool, str]:
@@ -117,6 +148,28 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.emit_event('fsm_input_ignored', source=source, lifecycle_state=self.lifecycle_state)
         return True
 
+    def _runtime_service_blocked(self, service_name: str) -> bool:
+        """Reject service-plane state mutations while the managed runtime is inactive.
+
+        Args:
+            service_name: Canonical service endpoint used for audit events.
+
+        Returns:
+            ``True`` when the request must be rejected because the node is not
+            in the ACTIVE lifecycle state; otherwise ``False``.
+
+        Boundary behavior:
+            The guard mirrors ``_runtime_input_blocked`` so service callbacks
+            cannot mutate FSM state while the managed runtime is configuring,
+            inactive, or shutting down.
+        """
+        if not hasattr(self, 'lifecycle_runtime'):
+            return False
+        if self.is_active():
+            return False
+        self.emit_event('fsm_service_rejected', service=service_name, lifecycle_state=self.lifecycle_state)
+        return True
+
     def _event_to_json(self, event_type: str, **payload: object) -> str:
         """Build a canonical runtime event payload for FSM publications."""
         return event_to_json(
@@ -125,6 +178,7 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
             phase=self.data.phase.value,
             item_id=self.data.item_id,
             batch_id=self.data.batch_id,
+            recipe_id=self.data.recipe_id,
             trace_id=self.data.trace_id,
             cycle_index=self.data.cycle_index,
             runtime_phase=self.runtime.current.current_phase or self.data.phase.value,
@@ -133,8 +187,29 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
         )
 
     def emit_event(self, event_type: str, **payload) -> None:
+        payload_json = self._event_to_json(event_type, **payload)
+        if event_type == 'fsm_transition':
+            publish_dual_runtime_event(
+                event_type='fsm_transition',
+                legacy_publisher=self.event_pub,
+                typed_publisher=self.typed_fsm_transition_pub,
+                typed_message_cls=FsmTransitionEvent,
+                populate_message=populate_fsm_transition_message,
+                payload=safe_json_loads(payload_json),
+            )
+            return
+        if event_type == 'fault_raised':
+            publish_dual_runtime_event(
+                event_type='fault_raised',
+                legacy_publisher=self.event_pub,
+                typed_publisher=self.typed_fault_raised_pub,
+                typed_message_cls=FaultRaisedEvent,
+                populate_message=populate_fault_raised_message,
+                payload=safe_json_loads(payload_json),
+            )
+            return
         msg = String()
-        msg.data = self._event_to_json(event_type, **payload)
+        msg.data = payload_json
         self.event_pub.publish(msg)
 
     def _record_phase_duration(self, phase: StationPhase, elapsed: float) -> None:
@@ -202,13 +277,57 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
         self._egress_service().publish_reset_request()
 
     def on_start(self, request, response):
-        self.data.batch_id = request.batch_id or 'BATCH_DEMO'
+        """Accept a gateway-authored runtime start request.
+
+        Args:
+            request: ``StartInspection`` service request populated by the gateway
+                control plane. ``recipe_id`` and ``batch_id`` are both required
+                because the runtime no longer invents recipe authority locally.
+            response: Mutable ``StartInspection`` service response.
+
+        Returns:
+            The populated response object.
+
+        Raises:
+            No exception is raised intentionally; validation failures are
+            returned in-band through ``response.success`` and ``response.message``.
+
+        Boundary behavior:
+            The method fails closed when the caller omits ``recipe_id`` or
+            ``batch_id`` so direct service callers cannot bypass the gateway's
+            preflight and activation-truth checks.
+        """
+        if self._runtime_service_blocked('/inspection/start'):
+            response.success = False
+            response.message = 'runtime is not active'
+            return response
+        recipe_id = str(getattr(request, 'recipe_id', '') or '').strip()
+        batch_id = str(getattr(request, 'batch_id', '') or '').strip()
+        if not recipe_id:
+            response.success = False
+            response.message = 'recipe_id is required'
+            self.emit_event('fsm_start_rejected', reason='recipe_id_missing')
+            return response
+        if not batch_id:
+            response.success = False
+            response.message = 'batch_id is required'
+            self.emit_event('fsm_start_rejected', reason='batch_id_missing', requested_recipe_id=recipe_id)
+            return response
+        self.data.recipe_id = recipe_id
+        self.data.batch_id = batch_id
+        self.runtime.current.recipe_id = recipe_id
+        self.runtime.current.batch_id = batch_id
         self.apply_event(StationEvent.START, 'service_start')
         response.success = True
         response.message = 'inspection started'
         return response
 
     def on_reset_fault(self, request, response):
+        """Reset a latched fault only when the managed runtime is active."""
+        if self._runtime_service_blocked('/inspection/reset_fault'):
+            response.success = False
+            response.message = 'runtime is not active'
+            return response
         self.apply_event(StationEvent.RESET, f'reset_by_{request.operator_name}')
         response.success = True
         response.message = 'fault reset'
@@ -233,8 +352,8 @@ class FSMNode(ManagedNodeMixin, InspectionRuntimeNode):
     def on_result(self, msg: InspectionResult) -> None:
         self._ingress_service().on_result(msg)
 
-    def on_sort_seen(self, msg: SortCommand) -> None:
-        self._ingress_service().on_sort_seen(msg)
+    def on_decision_output(self, msg: SortCommand) -> None:
+        self._ingress_service().on_decision_output(msg)
 
     def finish_cycle(self) -> None:
         self._metrics_service().finish_cycle()

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from station_bridge.reconnect_policy import ReconnectPolicy
 from station_bridge.runtime_support import BridgeRuntimeSupport
 from station_bridge.session_state import BridgeSession
+from inspection_utils.station_protocol_contract import StationProtocolContract
 
 
 class _Publisher:
@@ -90,7 +91,12 @@ class _NodeStub:
         self.next_reconnect_at = 0.0
         self.lifecycle_state = 'ACTIVE'
         self.adapter = _Adapter(fail_close=fail_close)
+        self.handshake_done = False
         self.seq = 0
+        self.protocol_version_label = 'v1'
+        self.supported_action_codes = {1, 2, 3}
+        self.protocol_contract = StationProtocolContract(accepted_versions=('v1',), compatible_reported_versions={'v1': ('v1',)}, capability_required_fields=('protocol_version', 'firmware_version', 'device_id', 'supported_action_codes'))
+        self.expected_station_features = {'SORT_ACK'}
 
     def get_clock(self):
         return _Clock()
@@ -128,3 +134,34 @@ def test_watchdog_tick_marks_degraded_and_schedules_handshake() -> None:
     assert node.session.phase.value == 'DEGRADED'
     assert node.next_reconnect_at > 0.0
     assert node.state_pub.messages
+
+
+def test_capabilities_protocol_contract_failure_publishes_fault_and_keeps_handshake_open() -> None:
+    node = _NodeStub()
+    support = BridgeRuntimeSupport(node)
+
+    support.handle_adapter_signal(SimpleNamespace(state='CAPABILITIES', seq=7, detail={'protocol_version': 'v1', 'firmware_version': 'fw', 'device_id': 'dev', 'supported_action_codes': [1]}))
+
+    assert node.handshake_done is False
+    assert node.fault_pub.messages
+
+
+def test_heartbeat_protocol_contract_failure_publishes_fault() -> None:
+    node = _NodeStub()
+    node.protocol_contract = StationProtocolContract(accepted_versions=('v1',), compatible_reported_versions={'v1': ('v1',)}, capability_required_fields=('protocol_version', 'firmware_version', 'device_id', 'supported_action_codes'), heartbeat_version_required=True)
+    support = BridgeRuntimeSupport(node)
+
+    support.handle_adapter_signal(SimpleNamespace(state='HEARTBEAT', seq=3, detail={'station_state': 'READY'}))
+
+    assert node.fault_pub.messages
+
+
+def test_capabilities_missing_expected_feature_publishes_fault() -> None:
+    node = _NodeStub()
+    node.expected_station_features = {'SORT_ACK', 'RESET_ACK'}
+    support = BridgeRuntimeSupport(node)
+
+    support.handle_adapter_signal(SimpleNamespace(state='CAPABILITIES', seq=8, detail={'protocol_version': 'v1', 'firmware_version': 'fw', 'device_id': 'dev', 'features': ['SORT_ACK'], 'supported_action_codes': [1, 2, 3]}))
+
+    assert node.handshake_done is False
+    assert node.fault_pub.messages

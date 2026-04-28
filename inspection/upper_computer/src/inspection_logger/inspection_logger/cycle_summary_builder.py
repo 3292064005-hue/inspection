@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from inspection_utils.models import CycleSummary
+from inspection_utils.model_common import CycleSummary
 
 
 @dataclass(slots=True)

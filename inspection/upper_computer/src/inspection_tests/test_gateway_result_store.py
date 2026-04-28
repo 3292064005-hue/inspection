@@ -134,7 +134,7 @@ def test_result_store_attaches_read_model_status(tmp_path: Path) -> None:
     assert 'degraded' in rows[0]['readModelStatus']
 
 
-def test_result_store_fallback_file_scan_tolerates_non_numeric_item_id(tmp_path: Path) -> None:
+def test_result_store_reports_projection_error_without_online_legacy_fallback(tmp_path: Path) -> None:
     results_dir = tmp_path / 'results'
     results_dir.mkdir(parents=True, exist_ok=True)
     (results_dir / 'result_log.csv').write_text(
@@ -142,12 +142,15 @@ def test_result_store_fallback_file_scan_tolerates_non_numeric_item_id(tmp_path:
         '2026-03-31T08:00:00Z,trace-bad-item,BATCH-X,not-a-number,recipe-a,COLOR,SHIFT,0.8,True,QR-1,True,red,0.9,images/raw.png,images/ann.png,{"processing_ms":"bad"}\n',
         encoding='utf-8',
     )
-    store = ResultStore(tmp_path, read_model_policy=ReadModelPolicy(fallback_legacy_reads=True))
-    store.read_model_repository.refresh_if_needed = lambda: (_ for _ in ()).throw(RuntimeError('force legacy fallback'))  # type: ignore[assignment]
-    rows = store.list_results()
-    assert rows
-    assert rows[0]['itemId'] == -1
-    assert rows[0]['cycleMs'] == 0.0
+    store = ResultStore(tmp_path)
+    store.read_model_repository.refresh_if_needed = lambda: (_ for _ in ()).throw(RuntimeError('projection refresh failed'))  # type: ignore[assignment]
+    try:
+        store.list_results()
+    except RuntimeError as exc:
+        assert 'projection refresh failed' in str(exc)
+    else:
+        raise AssertionError('expected projection-only query path to fail closed')
+    assert store.read_model_status(refresh=False)['fallbackEnabled'] is False
 
 
 

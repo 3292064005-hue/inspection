@@ -1,5 +1,9 @@
 #include "inspection_station_config.h"
+#include "inspection_station_action_profile.h"
+#include "inspection_station_contract/generated/inspection_station_capability_features_generated.hpp"
+#include "inspection_json_payload.hpp"
 #include "inspection_station_contract/inspection_station_contract.hpp"
+#include "inspection_station_runtime.hpp"
 #include "stm32f1xx_hal.h"
 
 #include <array>
@@ -127,50 +131,11 @@ std::string json_escape(const std::string& value) {
 }
 
 std::string json_get_string(const std::string& json, const char* key, const char* fallback = "") {
-    std::string marker = std::string("\"") + key + "\"";
-    size_t key_pos = json.find(marker);
-    if (key_pos == std::string::npos) {
-        return fallback;
-    }
-    size_t colon = json.find(':', key_pos + marker.size());
-    size_t start = json.find('"', colon + 1);
-    if (colon == std::string::npos || start == std::string::npos) {
-        return fallback;
-    }
-    size_t end = json.find('"', start + 1);
-    if (end == std::string::npos) {
-        return fallback;
-    }
-    return json.substr(start + 1, end - start - 1);
+    return inspection_json_payload::extract_string(json, key, fallback);
 }
 
 int json_get_int(const std::string& json, const char* key, int fallback = 0) {
-    std::string marker = std::string("\"") + key + "\"";
-    size_t key_pos = json.find(marker);
-    if (key_pos == std::string::npos) {
-        return fallback;
-    }
-    size_t colon = json.find(':', key_pos + marker.size());
-    if (colon == std::string::npos) {
-        return fallback;
-    }
-    size_t start = colon + 1;
-    while (start < json.size() && (json[start] == ' ' || json[start] == '\t')) {
-        ++start;
-    }
-    int sign = 1;
-    if (start < json.size() && json[start] == '-') {
-        sign = -1;
-        ++start;
-    }
-    int value = 0;
-    bool seen = false;
-    while (start < json.size() && json[start] >= '0' && json[start] <= '9') {
-        seen = true;
-        value = value * 10 + (json[start] - '0');
-        ++start;
-    }
-    return seen ? sign * value : fallback;
+    return inspection_json_payload::extract_int(json, key, fallback);
 }
 
 bool pin_active(GPIO_TypeDef* port, uint16_t pin, bool active_low) {
@@ -187,9 +152,11 @@ void set_led(bool on) {
 
 void reset_actuator_outputs() {
     HAL_GPIO_WritePin(INSPECTION_FEED_GPIO, INSPECTION_FEED_PIN, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(INSPECTION_SORT_OK_GPIO, INSPECTION_SORT_OK_PIN, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(INSPECTION_SORT_NG_GPIO, INSPECTION_SORT_NG_PIN, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(INSPECTION_SORT_RECHECK_GPIO, INSPECTION_SORT_RECHECK_PIN, GPIO_PIN_RESET);
+    for (const auto& route : INSPECTION_STATION_ACTION_ROUTES) {
+        if (route.gpio != nullptr && route.pin != 0U) {
+            HAL_GPIO_WritePin(route.gpio, route.pin, GPIO_PIN_RESET);
+        }
+    }
 }
 
 void clear_execution() {
@@ -198,16 +165,12 @@ void clear_execution() {
 }
 
 std::string device_state() {
-    if (g_fault_latched) {
-        return "FAULT";
-    }
-    if (g_execution.active && g_execution.kind == ActiveExecution::FEED) {
-        return "FEEDING";
-    }
-    if (g_execution.active && g_execution.kind == ActiveExecution::SORT) {
-        return "SORTING";
-    }
-    return "READY";
+    const auto kind = g_execution.kind == ActiveExecution::FEED
+        ? inspection_station_runtime::ExecutionKind::FEED
+        : (g_execution.kind == ActiveExecution::SORT
+            ? inspection_station_runtime::ExecutionKind::SORT
+            : inspection_station_runtime::ExecutionKind::NONE);
+    return inspection_station_runtime::device_state(g_fault_latched, g_execution.active, kind);
 }
 
 void send_fault(const char* fault_code, const char* message) {
@@ -218,16 +181,80 @@ void send_fault(const char* fault_code, const char* message) {
     send_frame(RSP_FAULT, 0, payload);
 }
 
+/**
+ * Render the supported action code list as one JSON array literal.
+ *
+ * Args:
+ *   None.
+ *
+ * Returns:
+ *   A JSON fragment such as `[1,2,3]` that can be embedded directly into the
+ *   capabilities payload without extra escaping.
+ *
+ * Raises:
+ *   No exception is raised.
+ *
+ * Boundary behavior:
+ *   The returned order is stable and follows the contract-level supported code
+ *   sequence so host-side capability validation sees deterministic payloads.
+ */
+std::string supported_action_codes_json() {
+    const auto supported_codes = inspection_station_contract::supported_action_codes();
+    std::string payload = "[";
+    for (size_t index = 0; index < supported_codes.size(); ++index) {
+        if (index > 0) {
+            payload += ",";
+        }
+        payload += std::to_string(supported_codes[index]);
+    }
+    payload += "]";
+    return payload;
+}
+
+/**
+ * Render the registry-derived station capability feature list as one JSON array.
+ *
+ * Args:
+ *   None.
+ *
+ * Returns:
+ *   A JSON fragment such as `["SORT_ACK","HEARTBEAT"]` suitable for direct
+ *   embedding inside the capabilities payload.
+ *
+ * Raises:
+ *   No exception is raised.
+ *
+ * Boundary behavior:
+ *   The returned order is stable because the generated registry artifact stores
+ *   the canonical feature sequence used by upper-computer validation.
+ */
+std::string capability_features_json() {
+    const auto features = inspection_station_generated::capability_features();
+    std::string payload = "[";
+    for (size_t index = 0; index < features.size(); ++index) {
+        if (index > 0) {
+            payload += ",";
+        }
+        payload += "\"";
+        payload += json_escape(features[index]);
+        payload += "\"";
+    }
+    payload += "]";
+    return payload;
+}
+
 void send_capabilities(uint8_t seq) {
     std::string payload =
         std::string("{\"protocol_version\":\"") + INSPECTION_PROTOCOL_VERSION +
         "\",\"firmware_version\":\"" + INSPECTION_FW_VERSION +
         "\",\"device_id\":\"" + INSPECTION_DEVICE_ID +
-        "\",\"features\":[\"SORT_ACK\",\"HEARTBEAT\",\"RESET_ACK\",\"CAPABILITY_QUERY\"],\"supported_action_codes\":[1,2,3]}";
+        "\",\"features\":" + capability_features_json() +
+        ",\"supported_action_codes\":" + supported_action_codes_json() + "}";
     send_frame(RSP_CAPABILITIES, seq, payload);
 }
 
 void send_heartbeat(uint8_t seq) {
+
     char payload[192];
     std::snprintf(payload, sizeof(payload),
                   "{\"device_id\":\"%s\",\"firmware_version\":\"%s\",\"protocol_version\":\"%s\",\"uptime_ms\":%lu,\"station_state\":\"%s\"}",
@@ -284,27 +311,39 @@ void start_feed_action(uint8_t seq, const std::string& payload) {
     start_pulse(INSPECTION_FEED_GPIO, INSPECTION_FEED_PIN, INSPECTION_FEED_PULSE_MS);
 }
 
+/**
+ * Resolve one sort action code to the configured actuator output.
+ *
+ * Args:
+ *   action_code: Station action code received from the host request payload.
+ *   port: Output pointer that receives the GPIO port when resolution succeeds.
+ *   pin: Output pointer that receives the GPIO pin when resolution succeeds.
+ *
+ * Returns:
+ *   True when the action code is supported and both output pointers are filled;
+ *   otherwise false.
+ *
+ * Raises:
+ *   No exception is raised.
+ *
+ * Boundary behavior:
+ *   Unsupported codes fail closed and leave the caller responsible for sending
+ *   a protocol NACK instead of energizing any actuator output.
+ */
 bool resolve_sort_pin(int action_code, GPIO_TypeDef** port, uint16_t* pin) {
     if (!inspection_station_contract::is_supported_action_code(static_cast<uint8_t>(action_code))) {
         return false;
     }
-    if (action_code == 1) {
-        *port = INSPECTION_SORT_OK_GPIO;
-        *pin = INSPECTION_SORT_OK_PIN;
-        return true;
-    }
-    if (action_code == 2) {
-        *port = INSPECTION_SORT_NG_GPIO;
-        *pin = INSPECTION_SORT_NG_PIN;
-        return true;
-    }
-    if (action_code == 3) {
-        *port = INSPECTION_SORT_RECHECK_GPIO;
-        *pin = INSPECTION_SORT_RECHECK_PIN;
-        return true;
+    for (const auto& route : INSPECTION_STATION_ACTION_ROUTES) {
+        if (static_cast<int>(route.action_code) == action_code) {
+            *port = route.gpio;
+            *pin = route.pin;
+            return true;
+        }
     }
     return false;
 }
+
 
 /**
  * Start one sort cycle without blocking the main control loop.
@@ -573,6 +612,14 @@ void MX_USART1_UART_Init() {
     HAL_UART_Init(&huart1);
 }
 
+uint16_t configured_sort_output_mask() {
+    uint16_t mask = 0U;
+    for (const auto& route : INSPECTION_STATION_ACTION_ROUTES) {
+        mask = static_cast<uint16_t>(mask | route.pin);
+    }
+    return mask;
+}
+
 void MX_GPIO_Init() {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
@@ -596,7 +643,7 @@ void MX_GPIO_Init() {
     gpio.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(INSPECTION_LED_GPIO, &gpio);
 
-    gpio.Pin = INSPECTION_FEED_PIN | INSPECTION_SORT_OK_PIN | INSPECTION_SORT_NG_PIN | INSPECTION_SORT_RECHECK_PIN;
+    gpio.Pin = static_cast<uint16_t>(INSPECTION_FEED_PIN | configured_sort_output_mask());
     gpio.Mode = GPIO_MODE_OUTPUT_PP;
     gpio.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOB, &gpio);

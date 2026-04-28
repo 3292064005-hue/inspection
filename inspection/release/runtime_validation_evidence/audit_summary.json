@@ -1,0 +1,97 @@
+{
+  "gateStatusPath": "release/runtime_validation_evidence/gate_status.json",
+  "gateStatusPresent": true,
+  "gateStatusSha256": "4d1f59a0bd381291076f8593ee6231e81883fdfd8576a75ede69daab9e9e5e14",
+  "gateValidationErrors": [],
+  "gateValidationNotes": [
+    "formal_release_requires_strict_gate"
+  ],
+  "generatedAt": "2026-04-28T04:04:43Z",
+  "matrixPath": "release/runtime_validation_matrix.yaml",
+  "matrixSha256": "80854e13e47f706439119059d46f484091d96110f64ea18e6c595131d2bbb7d6",
+  "overallStatus": "internal_unvalidated",
+  "readyCount": 0,
+  "releaseEvidenceTopics": {
+    "core": [
+      "/inspection/decision",
+      "/inspection/image_raw",
+      "/inspection/result",
+      "/inspection/station/state"
+    ],
+    "debug": [],
+    "diagnostic": [
+      "/inspection/diagnostics",
+      "/inspection/image_annotated",
+      "/inspection/result_raw"
+    ]
+  },
+  "releaseGateEligible": false,
+  "requiredEvidenceRoot": "release/runtime_validation_evidence",
+  "requiredReadyCount": 0,
+  "requiredScenarioCount": 4,
+  "scenarioCount": 4,
+  "scenarios": [
+    {
+      "evidencePath": "release/runtime_validation_evidence/sim_closed_loop.json",
+      "evidencePresent": false,
+      "id": "sim_closed_loop",
+      "missingEvidence": [],
+      "required": true,
+      "requiresHardwareEvidence": false,
+      "status": "omitted_internal_unvalidated",
+      "tier": "P0",
+      "trigger": "bash upper_computer/scripts/run_ros2_humble_runtime_validation.sh",
+      "validationErrors": [],
+      "validationNotes": [
+        "sim_execution_skipped_internal"
+      ]
+    },
+    {
+      "evidencePath": "release/runtime_validation_evidence/upper_computer_with_stm32.json",
+      "evidencePresent": false,
+      "id": "upper_computer_with_stm32",
+      "missingEvidence": [],
+      "required": true,
+      "requiresHardwareEvidence": true,
+      "status": "omitted_internal_unvalidated",
+      "tier": "P0",
+      "trigger": "ros2 launch inspection_bringup real_station.launch.py sim_mode:=false station_config_path:=config/station/station_stm32.yaml action_executor_enabled:=true",
+      "validationErrors": [],
+      "validationNotes": [
+        "hardware_evidence_omitted_internal"
+      ]
+    },
+    {
+      "evidencePath": "release/runtime_validation_evidence/upper_computer_with_esp32s3.json",
+      "evidencePresent": false,
+      "id": "upper_computer_with_esp32s3",
+      "missingEvidence": [],
+      "required": true,
+      "requiresHardwareEvidence": true,
+      "status": "omitted_internal_unvalidated",
+      "tier": "P0",
+      "trigger": "ros2 launch inspection_bringup real_station.launch.py sim_mode:=false camera_config_path:=config/camera/camera_esp32s3.yaml action_executor_enabled:=true",
+      "validationErrors": [],
+      "validationNotes": [
+        "hardware_evidence_omitted_internal"
+      ]
+    },
+    {
+      "evidencePath": "release/runtime_validation_evidence/full_hardware_closed_loop.json",
+      "evidencePresent": false,
+      "id": "full_hardware_closed_loop",
+      "missingEvidence": [],
+      "required": true,
+      "requiresHardwareEvidence": true,
+      "status": "omitted_internal_unvalidated",
+      "tier": "P0",
+      "trigger": "ros2 launch inspection_bringup real_station.launch.py sim_mode:=false station_config_path:=config/station/station_stm32.yaml camera_config_path:=config/camera/camera_esp32s3.yaml enable_gateway:=true action_executor_enabled:=true",
+      "validationErrors": [],
+      "validationNotes": [
+        "hardware_evidence_omitted_internal"
+      ]
+    }
+  ],
+  "schemaVersion": 1,
+  "verificationMode": "relaxed"
+}

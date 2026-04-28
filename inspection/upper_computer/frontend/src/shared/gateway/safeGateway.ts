@@ -3,6 +3,7 @@ import {
   gatewayValidators,
   parseCountStats,
   parseInspectionResult,
+  parseResultStatistics,
   parseDiagnosticsActionResult,
   parseReadModelStatus,
   parseRecipeProfile,
@@ -11,7 +12,7 @@ import {
   validateRecipesArray,
   validateResultsArray,
 } from '@/shared/gateway/validation';
-import type { AuthSession, DemoScenario, DiagnosticAction, ResultQuery } from '@/shared/types/domain';
+import type { ActionCapabilityMatrix, ActionCatalogEntry, AuthSession, DemoScenario, DiagnosticAction, ResultQuery, ResultStatisticsQuery } from '@/shared/types/domain';
 import { useAppStore } from '@/entities/app/store';
 import { toGatewayError } from '@/shared/gateway/errors';
 
@@ -138,6 +139,13 @@ export class SafeGateway implements HmiGateway {
     return validateResultsArray(await this.inner.getResults(query));
   }
 
+  async getResultStatistics(query?: ResultStatisticsQuery) {
+    if (!this.inner.getResultStatistics) {
+      throw new Error('getResultStatistics not supported');
+    }
+    return parseResultStatistics(await this.inner.getResultStatistics(query));
+  }
+
   async getResultDetail(resultId: string) {
     if (!this.inner.getResultDetail) {
       throw new Error('getResultDetail not supported');
@@ -185,5 +193,13 @@ export class SafeGateway implements HmiGateway {
       throw toGatewayError(undefined, 'Gateway payload validation failed: exportBatch');
     }
     return payload;
+  }
+
+  getActionCatalog(includeNonProduction = false): Promise<ActionCatalogEntry[]> {
+    return this.inner.getActionCatalog?.(includeNonProduction) ?? Promise.resolve([]);
+  }
+
+  getActionCapabilityMatrix(): Promise<ActionCapabilityMatrix> {
+    return this.inner.getActionCapabilityMatrix?.() ?? Promise.resolve({});
   }
 }

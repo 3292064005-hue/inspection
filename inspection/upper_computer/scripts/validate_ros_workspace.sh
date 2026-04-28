@@ -4,6 +4,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; ARTIFACT_DIR="$ROOT
 cd "$ROOT_DIR"
 if ! python3 "$ROOT_DIR/scripts/ros_release_gate_preflight.py" --workspace-root "$ROOT_DIR" --require-colcon --require-frontend-dist --write-json "$PREFLIGHT_JSON" > "$COLCON_LOG" 2>&1; then printf '%s\n' 'ROS release gate failed during preflight. See ros_release_preflight.json and ros_colcon.log for details.' >> "$COLCON_LOG"; printf '%s\n' 'ROS release gate failed before test execution; no colcon test results available.' > "$TEST_RESULT_LOG"; exit 1; fi
 export INSPECTION_REQUIRE_FRONTEND_DIST=1
+python3 "$ROOT_DIR/scripts/validate_action_registry_completeness.py" >> "$COLCON_LOG" 2>&1
 export INSPECTION_REQUIRE_TYPED_INTERFACES=1
 COLCON_BUILD_ARGS=(build --symlink-install --event-handlers console_direct+ --packages-up-to inspection_tests)
 COLCON_TEST_ARGS=(test --event-handlers console_direct+ --packages-select inspection_tests --return-code-on-test-failure)

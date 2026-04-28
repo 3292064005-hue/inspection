@@ -20,3 +20,4 @@ serial_port: /dev/ttyUSB0
 ack_stale_timeout_sec: 5.0
 heartbeat_watchdog_sec: 3.0
 enable_startup_handshake: true
+station_capability_profile: simulation_station_default

@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from inspection_utils.logging_tools import append_jsonl, utc_now_str
+from inspection_utils.logging_common import append_jsonl, utc_now_str
 
 
 class TraceStore:

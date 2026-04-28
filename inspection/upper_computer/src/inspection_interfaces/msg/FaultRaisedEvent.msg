@@ -1,0 +1,10 @@
+string code
+string description
+int32 item_id
+string batch_id
+string trace_id
+int32 cycle_index
+string runtime_phase
+string profile_name
+string schema_version
+string payload_json

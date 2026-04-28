@@ -6,6 +6,7 @@
 #include "esp_camera.h"
 #include "inspection_camera_config.h"
 #include "inspection_camera_contract/inspection_camera_contract.hpp"
+#include "inspection_camera_runtime.hpp"
 
 namespace {
 WebServer server(INSPECTION_HTTP_PORT);
@@ -58,11 +59,11 @@ String configuredAuthToken() { return String(INSPECTION_HTTP_AUTH_TOKEN); }
 String configuredAuthHeader() { return String(INSPECTION_HTTP_AUTH_HEADER); }
 
 bool hasPlaceholderValue(const String& value) {
-    return value.isEmpty() || value == "__REPLACE_ME__" || value == "__REPLACE_WITH_TOKEN__";
+    return inspection_camera_runtime::has_placeholder_value(std::string(value.c_str()));
 }
 
 bool wifiCredentialsConfigured() {
-    return !hasPlaceholderValue(configuredWifiSsid());
+    return inspection_camera_runtime::wifi_credentials_configured(std::string(configuredWifiSsid().c_str()));
 }
 
 bool authTokenConfigured() {
@@ -217,7 +218,7 @@ void handleSnapshot() {
         camera_ok = false;
         last_snapshot_ok = false;
         consecutive_snapshot_failures++;
-        if (consecutive_snapshot_failures >= INSPECTION_CAMERA_REINIT_FAILURE_THRESHOLD) {
+        if (inspection_camera_runtime::should_reinitialize_camera(consecutive_snapshot_failures, INSPECTION_CAMERA_REINIT_FAILURE_THRESHOLD)) {
             const bool reinit_ok = reinitializeCamera();
             server.send(
                 503,

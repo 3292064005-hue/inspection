@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 else:
     CountStats = FaultEvent = InspectionResult = StationState = Any
 
-from inspection_utils.logging_tools import safe_json_loads
-from inspection_utils.paths import relative_artifact_path
+from inspection_utils.logging_common import safe_json_loads
+from inspection_utils.io_common import relative_artifact_path
 
 from .runtime_components import _safe_float, _safe_int, normalize_mode, normalize_phase, ros_time_to_iso, to_health, utc_now
 
@@ -82,6 +82,7 @@ class GatewayReadModelProjector:
         pending_max_entries: int = 512,
         on_runtime_result_observed: Any | None = None,
         state_store: Any | None = None,
+        emit_created_alias: bool = True,
     ) -> None:
         self.state = state
         self.state_store = state_store
@@ -90,6 +91,7 @@ class GatewayReadModelProjector:
         self.pending_results = PendingCorrelationStore(ttl_sec=pending_ttl_sec, max_entries=pending_max_entries)
         self.pending_decisions = PendingCorrelationStore(ttl_sec=pending_ttl_sec, max_entries=pending_max_entries)
         self.on_runtime_result_observed = on_runtime_result_observed
+        self.emit_created_alias = bool(emit_created_alias)
 
     def _mutate_state(self, mutator: Callable[[Any], Any]) -> Any:
         if self.state_store is not None:
@@ -184,12 +186,13 @@ class GatewayReadModelProjector:
                 'capturedAt': record['timestamp'],
                 'annotated': bool(record['overlayUrl']),
                 'semantic': 'LATEST_RESULT_FRAME',
-                'sourceEvent': 'inspection.result.created',
+                'sourceEvent': 'inspection.result.observed',
                 'description': '最近一次视觉处理结果对应的图像快照。',
             }
 
         snapshot = self._mutate_state(_apply)
         self.event_bus.broadcast('camera.frame', snapshot.latest_frame)
+        self.event_bus.broadcast('inspection.result.observed', dict(record))
         self.pending_results.put(trace_id, record)
         if callable(self.on_runtime_result_observed):
             try:
@@ -242,7 +245,7 @@ class GatewayReadModelProjector:
                 state.phase = target_phase
                 state.mode = normalize_mode(target_phase, payload)
                 state.cycle_index = _safe_int(payload.get('cycle_index', state.cycle_index), default=state.cycle_index)
-                state.guidance = self._guidance_from_phase(raw_target_phase or target_phase)
+                state.guidance = self._guidance_from_phase(target_phase)
                 state.last_updated_at = str(payload.get('time', utc_now()))
                 manual_enabled = bool(payload.get('manual_mode_enabled', False))
                 if raw_target_phase == 'MANUAL_MODE' or manual_enabled:
@@ -405,7 +408,9 @@ class GatewayReadModelProjector:
             'decision': str(decision_payload.get('decision', 'RECHECK')),
             'explanation': explanation or ['判定已生成'],
         }
-        self.event_bus.broadcast('inspection.result.created', record)
+        self.event_bus.broadcast('inspection.result.finalized', record)
+        if self.emit_created_alias:
+            self.event_bus.broadcast('inspection.result.created', dict(record))
         self.pending_results.pop(trace_id)
         self.pending_decisions.pop(trace_id)
 

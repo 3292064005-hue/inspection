@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from statistics import mean
 
-from inspection_utils.logging_tools import append_jsonl, utc_now_str
+from inspection_utils.logging_common import append_jsonl, utc_now_str
 
 
 class BenchmarkWriter:

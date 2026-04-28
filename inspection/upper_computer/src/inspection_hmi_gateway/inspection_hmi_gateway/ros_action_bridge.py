@@ -27,6 +27,32 @@ def _load_action_type(class_name: str) -> Any | None:
         return None
 
 
+def _result_payload_json(result: object) -> str:
+    """Serialize one terminal action result payload for ROS action transport.
+
+    Args:
+        result: Runtime action result payload attached to the persisted action job.
+
+    Returns:
+        JSON object string preserving the full business result payload.
+
+    Raises:
+        No caller-visible exception is raised. Non-serializable payloads fall back
+        to an empty JSON object so the bridge fails closed without crashing the
+        ROS executor callback.
+
+    Boundary behavior:
+        Non-mapping payloads are normalized into an empty JSON object because the
+        canonical action plane persists mapping-shaped result payloads only.
+    """
+    if not isinstance(result, dict):
+        return '{}'
+    try:
+        return json.dumps(result, ensure_ascii=False)
+    except Exception:
+        return '{}'
+
+
 def native_action_availability() -> dict[str, object]:
     try:
         from rclpy.action import ActionServer  # noqa: F401
@@ -146,8 +172,13 @@ class RosActionBridge:
             setattr(goal_handle, '_inspection_job_id', job_id)
             started = time.monotonic()
             timeout_override: dict[str, Any] | None = None
+            current = dict(job)
+            observed_persisted_job = False
             while True:
-                current = provider.get_job(job_id) or {}
+                polled = provider.get_job(job_id)
+                if polled:
+                    current = polled
+                    observed_persisted_job = True
                 status = str(current.get('status', ''))
                 feedback = action_type.Feedback()
                 feedback.phase = status or 'UNKNOWN'
@@ -163,19 +194,24 @@ class RosActionBridge:
                     timeout_override = {**(provider.get_job(job_id) or current), 'status': 'FAILED', 'message': 'action_job_timeout'}
                     break
                 await asyncio.sleep(self.poll_interval_sec)
-            current = timeout_override or provider.get_job(job_id) or {}
+            polled = provider.get_job(job_id)
+            if polled:
+                observed_persisted_job = True
+            current = timeout_override or polled or current
             status = str(current.get('status', ''))
             result = dict(current.get('result', {}))
-            if status == 'COMPLETED':
-                goal_handle.succeed()
-            elif status == 'CANCELLED':
-                goal_handle.canceled()
-            else:
-                goal_handle.abort()
+            if observed_persisted_job or status != 'COMPLETED':
+                if status == 'COMPLETED':
+                    goal_handle.succeed()
+                elif status == 'CANCELLED':
+                    goal_handle.canceled()
+                else:
+                    goal_handle.abort()
             result_msg.accepted = status == 'COMPLETED'
-            result_msg.message = str(current.get('message', status or 'UNKNOWN'))
+            result_msg.message = str(current.get('message') or job_id or status or 'UNKNOWN')
             if hasattr(result_msg, 'export_url'):
                 result_msg.export_url = str(result.get('exportUrl', result.get('export_url', '')))
+            if hasattr(result_msg, 'result_json'):
+                result_msg.result_json = _result_payload_json(result)
             return result_msg
         return _execute
-

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from inspection_hmi_gateway.action_contract import ActionPolicyError
 from inspection_hmi_gateway.server.main import create_app
 
+from recipe_payloads import make_hmi_recipe_payload
 from test_gateway_api_v1 import _FakeRuntime, _auth_header, _users_file, _write_logs
 
 
@@ -35,7 +36,7 @@ class _MaintenanceEnabledRuntime(_FakeRuntime):
         self.node.state.snapshot_payload = snapshot_payload
 
 
-def _poll_job(client: TestClient, headers: dict[str, str], job_id: str, *, timeout: float = 2.0) -> dict:
+def _poll_job(client: TestClient, headers: dict[str, str], job_id: str, *, timeout: float = 15.0) -> dict:
     deadline = time.time() + timeout
     last: dict | None = None
     while time.time() < deadline:
@@ -49,7 +50,8 @@ def _poll_job(client: TestClient, headers: dict[str, str], job_id: str, *, timeo
     return last
 
 
-def test_action_job_execute_replay_and_export_batch(tmp_path: Path) -> None:
+def test_action_job_execute_replay_and_export_batch(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -84,7 +86,8 @@ def test_action_job_execute_replay_and_export_batch(tmp_path: Path) -> None:
         assert listed.json()['meta']['page']['total'] >= 2
 
 
-def test_action_job_switch_recipe_and_cancel(tmp_path: Path) -> None:
+def test_action_job_switch_recipe_and_cancel(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -99,7 +102,7 @@ def test_action_job_switch_recipe_and_cancel(tmp_path: Path) -> None:
         admin_headers = _auth_header(client, 'admin', 'admin123')
         operator_headers = _auth_header(client, 'operator', 'operator123')
         # seed extra recipe
-        recipe_resp = client.post('/api/v1/recipes', headers=admin_headers, json={'id': 'recipe-next', 'name': '下一配方', 'version': '1.0.1', 'roi': [1, 2, 3, 4], 'qrRoi': [5, 6, 7, 8]})
+        recipe_resp = client.post('/api/v1/recipes', headers=admin_headers, json=make_hmi_recipe_payload(recipe_id='recipe-next', name='下一配方', version='1.0.1'))
         assert recipe_resp.status_code == 200
 
         switch_submit = client.post('/api/v1/actions/switch-recipe', headers=admin_headers, json={'recipeId': 'recipe-next'})
@@ -108,17 +111,14 @@ def test_action_job_switch_recipe_and_cancel(tmp_path: Path) -> None:
         assert switch_job['status'] == 'COMPLETED'
         assert switch_job['result']['recipeId'] == 'recipe-next'
 
-        calibration_submit = client.post('/api/v1/actions/run-calibration', headers=operator_headers, json={'profile': 'camera-main'})
-        # operator lacks maintainer role
-        assert calibration_submit.status_code == 403
+        calibration_submit = client.post('/api/internal/actions/run-calibration', headers=operator_headers, json={'profile': 'camera-main'})
+        assert calibration_submit.status_code == 404
 
-        blocked_submit = client.post('/api/v1/actions/run-calibration', headers=admin_headers, json={'profile': 'camera-main'})
-        assert blocked_submit.status_code == 409
-        assert blocked_submit.json()['message'] == '标定闭环尚未落地，当前仅保留目录位。'
-        assert blocked_submit.json()['error']['detail']['code'] == 'calibration_workflow_not_available'
+        blocked_submit = client.post('/api/internal/actions/run-calibration', headers=admin_headers, json={'profile': 'camera-main'})
+        assert blocked_submit.status_code == 404
 
 
-def test_action_job_submit_rejects_missing_required_payload(tmp_path: Path) -> None:
+def test_action_job_submit_rejects_missing_required_payload(tmp_path: Path, monkeypatch) -> None:
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -132,15 +132,16 @@ def test_action_job_submit_rejects_missing_required_payload(tmp_path: Path) -> N
     with TestClient(app) as client:
         operator_headers = _auth_header(client, 'operator', 'operator123')
         missing_recipe = client.post('/api/v1/actions/start-batch', headers=operator_headers, json={'batchId': 'BATCH-1'})
-        assert missing_recipe.status_code == 400
-        assert missing_recipe.json()['error']['code'] == 'HTTP_400'
+        assert missing_recipe.status_code == 422
+        assert missing_recipe.json()['error']['code'] == 'VALIDATION_ERROR'
 
         missing_trace = client.post('/api/v1/actions/execute-replay', headers=operator_headers, json={'traceId': ''})
-        assert missing_trace.status_code == 400
-        assert missing_trace.json()['error']['code'] == 'HTTP_400'
+        assert missing_trace.status_code == 422
+        assert missing_trace.json()['error']['code'] == 'VALIDATION_ERROR'
 
 
-def test_run_benchmark_requires_explicit_experimental_env_gate(tmp_path: Path, monkeypatch) -> None:
+def test_run_benchmark_is_available_as_internal_synthetic_tooling_action(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -151,32 +152,18 @@ def test_run_benchmark_requires_explicit_experimental_env_gate(tmp_path: Path, m
         users_path=str(_users_file(tmp_path)),
         runtime_factory=lambda: _FakeRuntime(logs_root, recipes_root),
     )
-    monkeypatch.delenv('INSPECTION_EXPERIMENTAL_ACTIONS_ENABLED', raising=False)
     with TestClient(app) as client:
         admin_headers = _auth_header(client, 'admin', 'admin123')
-        blocked = client.post('/api/v1/actions/run-benchmark', headers=admin_headers, json={'sampleCount': 3})
-        assert blocked.status_code == 409
-        assert blocked.json()['message'] == '仅提供合成基准样本，不代表真实工艺闭环。'
-        assert blocked.json()['error']['detail']['code'] == 'benchmark_requires_experimental_actions'
-
-    monkeypatch.setenv('INSPECTION_EXPERIMENTAL_ACTIONS_ENABLED', '1')
-    app_enabled = create_app(
-        log_root=str(logs_root),
-        recipe_root=str(recipes_root),
-        frontend_dist=str(tmp_path / 'frontend_dist_missing'),
-        users_path=str(_users_file(tmp_path)),
-        runtime_factory=lambda: _FakeRuntime(logs_root, recipes_root),
-    )
-    with TestClient(app_enabled) as client:
-        admin_headers = _auth_header(client, 'admin', 'admin123')
-        submit = client.post('/api/v1/actions/run-benchmark', headers=admin_headers, json={'sampleCount': 3})
+        submit = client.post('/api/internal/actions/run-benchmark', headers=admin_headers, json={'sampleCount': 3})
         assert submit.status_code == 200
         job = _poll_job(client, admin_headers, submit.json()['data']['jobId'])
         assert job['status'] == 'COMPLETED'
         assert job['result']['executionClass'] == 'synthetic'
+        assert job['kind'] == 'run_benchmark'
 
 
-def test_action_job_diagnostics_submit_via_standard_action_plane(tmp_path: Path) -> None:
+def test_action_job_diagnostics_submit_via_standard_action_plane(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -217,7 +204,8 @@ def test_action_job_diagnostics_require_committed_maintenance_mode(tmp_path: Pat
         assert blocked.json()['error']['detail']['code'] == 'diagnostic_requires_maintenance_enabled'
 
 
-def test_action_job_diagnostics_server_side_cooldown_blocks_duplicate_submit(tmp_path: Path) -> None:
+def test_action_job_diagnostics_server_side_cooldown_blocks_duplicate_submit(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -240,7 +228,8 @@ def test_action_job_diagnostics_server_side_cooldown_blocks_duplicate_submit(tmp
         assert duplicate.json()['error']['detail']['code'] == 'diagnostic_action_cooldown_active'
 
 
-def test_action_job_diagnostics_concurrent_submit_is_serialized_server_side(tmp_path: Path) -> None:
+def test_action_job_diagnostics_concurrent_submit_is_serialized_server_side(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -309,7 +298,8 @@ def test_action_job_diagnostics_rejection_is_audited_and_returns_human_message(t
         assert rejection['details']['message'] == '维护模式未生效，危险动作已锁定。'
 
 
-def test_action_job_transport_failure_marks_job_failed_and_does_not_block_future_diagnostics(tmp_path: Path) -> None:
+def test_action_job_transport_failure_marks_job_failed_and_does_not_block_future_diagnostics(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)

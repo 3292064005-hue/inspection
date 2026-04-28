@@ -1,0 +1,61 @@
+{
+  "scenarioId": "upper_computer_with_esp32s3",
+  "tier": "P0",
+  "executedAt": "REPLACE_WITH_UTC_TIMESTAMP",
+  "operator": "REPLACE_WITH_OPERATOR",
+  "gitCommit": "REPLACE_WITH_GIT_COMMIT",
+  "trigger": "ros2 launch inspection_bringup real_station.launch.py sim_mode:=false camera_config_path:=config/camera/camera_esp32s3.yaml action_executor_enabled:=true",
+  "environment": {
+    "host": "REPLACE_WITH_HOST",
+    "upperComputer": true,
+    "stm32": false,
+    "esp32s3": true
+  },
+  "expectedChecks": [
+    {
+      "name": "camera_health_endpoint_ready",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "snapshot_capture_success",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "auth_gate_behavior",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "reconnect_throttle_behavior",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    }
+  ],
+  "failureCriteria": [
+    {
+      "name": "camera_provider_unavailable",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    },
+    {
+      "name": "snapshot_failed",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    },
+    {
+      "name": "wifi_reconnect_unbounded",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    }
+  ],
+  "artifacts": {
+    "logs": [],
+    "screenshots": [],
+    "videos": [],
+    "reports": []
+  },
+  "notes": "REPLACE_WITH_EXECUTION_SUMMARY",
+  "passed": false
+}

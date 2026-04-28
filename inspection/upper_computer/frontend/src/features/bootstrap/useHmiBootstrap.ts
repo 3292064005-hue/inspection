@@ -30,6 +30,30 @@ export function useHmiBootstrap() {
   let handlersRegistered = false;
   let connecting = false;
   let recoveredRetryCount = -1;
+  const seenResultSignatures = new Map<string, true>();
+
+
+  function rememberResultSignature(signature: string): void {
+    seenResultSignatures.set(signature, true);
+    if (seenResultSignatures.size <= 128) {
+      return;
+    }
+    const oldest = seenResultSignatures.keys().next().value;
+    if (oldest) seenResultSignatures.delete(oldest);
+  }
+
+  function resultSignature(payload: { id: string; timestamp: string; decision?: string }): string {
+    return `${payload.id}:${payload.timestamp}:${payload.decision ?? ''}`;
+  }
+
+  function applyFinalizedResult(payload: GatewayEventMap['inspection.result.finalized']): void {
+    const signature = resultSignature(payload);
+    if (seenResultSignatures.has(signature)) {
+      return;
+    }
+    inspectionStore.applyResult(payload);
+    rememberResultSignature(signature);
+  }
 
   const handlers: GatewayHandlerMap = {
     'station.state.updated': (payload) => {
@@ -37,7 +61,8 @@ export function useHmiBootstrap() {
       inspectionStore.pushTimeline('工位状态更新', `${payload.phase} / ${payload.guidance}`);
     },
     'station.count.updated': (payload) => stationStore.applyStats(payload),
-    'inspection.result.created': (payload) => inspectionStore.applyResult(payload),
+    'inspection.result.observed': (payload) => inspectionStore.applyObservedResult(payload),
+    'inspection.result.finalized': (payload) => applyFinalizedResult(payload),
     'fault.raised': (payload) => {
       faultStore.raiseFault(payload);
       inspectionStore.pushTimeline('故障触发', `${payload.code} / ${payload.message}`, 'ERROR');
@@ -63,6 +88,16 @@ export function useHmiBootstrap() {
       const actionSummary = payload.actions.map((item) => item.action).join(', ') || '无可执行动作';
       inspectionStore.pushTimeline('编排建议', `${payload.tree} / ${payload.status} / ${actionSummary}`);
     },
+    'action.job.updated': (payload) => {
+      const status = String(payload.status ?? '').toUpperCase();
+      if (status === 'COMPLETED') {
+        inspectionStore.pushTimeline('动作任务完成', `${payload.jobId} / ${payload.kind ?? 'action'} / ${payload.message ?? status}`);
+      } else if (status === 'FAILED') {
+        inspectionStore.pushTimeline('动作任务失败', `${payload.jobId} / ${payload.message ?? payload.error?.message ?? 'failed'}`, 'ERROR');
+      } else if (status === 'CANCELLED') {
+        inspectionStore.pushTimeline('动作任务取消', `${payload.jobId} / ${payload.message ?? 'cancelled'}`, 'WARN');
+      }
+    },
   };
 
   function registerHandlers(): void {
@@ -86,7 +121,7 @@ export function useHmiBootstrap() {
   }
 
   async function syncInitialSnapshot(reason = '初始同步'): Promise<void> {
-    const [snapshot, stats, recipes, bootstrapResults] = await Promise.all([
+    const [snapshot, stats, recipes, bootstrapResults, statistics] = await Promise.all([
       gateway.getStationSnapshot(),
       gateway.getCountStats(),
       gateway.getRecipes(),
@@ -103,11 +138,28 @@ export function useHmiBootstrap() {
         }
         return [];
       }),
+      gateway.getResultStatistics
+        ? gateway.getResultStatistics({ sampleLimit: 120 }).catch(async (error) => {
+            const message = error instanceof Error ? error.message : '统计查询失败';
+            try {
+              const readModelStatus = await gateway.getReadModelStatus?.();
+              if (readModelStatus && (readModelStatus.degraded || readModelStatus.repairRequired || !!readModelStatus.lastError)) {
+                appStore.pushNotice({ level: 'WARN', title: '统计读模型需维护', message: readModelStatus.lastError || '统计视图未能完成启动补数，请先 repair。' });
+              } else {
+                appStore.pushNotice({ level: 'WARN', title: '统计查询失败', message });
+              }
+            } catch {
+              appStore.pushNotice({ level: 'WARN', title: '统计查询失败', message });
+            }
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
     stationStore.applySnapshot(snapshot);
     stationStore.applyStats(stats);
     recipeStore.setRecipes(recipes);
     inspectionStore.replaceRecentResults(bootstrapResults);
+    inspectionStore.applyStatistics(statistics ?? null);
     inspectionStore.pushTimeline('系统快照同步', `${reason}：工位、统计、配方与最近结果已更新。`);
   }
 
@@ -155,7 +207,7 @@ export function useHmiBootstrap() {
       recoveredRetryCount = 0;
       appStore.setConnectionState('ONLINE');
       stationStore.setConnectionState('ONLINE');
-      inspectionStore.pushTimeline('系统连接完成', `${reason}：初始快照、统计、配方与最近结果已同步。`);
+      inspectionStore.pushTimeline('系统连接完成', `${reason}：初始快照、统计、配方、聚合视图与最近结果已同步。`);
     } catch (error) {
       const message = error instanceof Error ? error.message : '系统初始化失败';
       appStore.setBootstrapError(message);

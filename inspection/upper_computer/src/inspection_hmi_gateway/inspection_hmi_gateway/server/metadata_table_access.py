@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
-from inspection_utils.logging_tools import safe_json_loads
+from inspection_utils.logging_common import safe_json_loads
 
 from .metadata_database import safe_int, token_digest
 

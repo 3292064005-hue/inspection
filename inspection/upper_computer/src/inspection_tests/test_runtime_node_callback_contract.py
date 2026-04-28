@@ -53,7 +53,8 @@ def test_logger_callbacks_are_class_methods() -> None:
         'on_capture_request',
         'on_typed_capture_request',
         'on_result',
-        'on_sort_cmd',
+        'on_decision_output',
+        'on_sort_request',
         'on_stats',
         'on_fault',
         'on_station',
@@ -70,7 +71,7 @@ def test_fsm_runtime_callbacks_and_services_are_class_methods() -> None:
     expected = {
         'on_station_state',
         'on_result',
-        'on_sort_seen',
+        'on_decision_output',
         'on_event_message',
         'on_control_message',
         'on_typed_control_message',
@@ -88,7 +89,7 @@ def test_station_bridge_runtime_callbacks_are_class_methods() -> None:
 
     expected = {
         'on_feed_request',
-        'on_sort_cmd',
+        'on_sort_request',
         'on_reset_request',
     }
     assert expected.issubset(methods)
@@ -211,3 +212,10 @@ def test_result_store_requires_explicit_repair_for_projection_field_updates(tmp_
     assert refreshed is not None
     assert int(refreshed['artifactCount']) >= baseline_artifact_count + 1
     assert int(refreshed['traceBundle']['artifactCount']) >= baseline_artifact_count + 1
+
+
+def test_fsm_start_and_reset_services_guard_inactive_managed_runtime() -> None:
+    text = (REPO_ROOT / 'src' / 'inspection_fsm' / 'inspection_fsm' / 'fsm_node.py').read_text(encoding='utf-8')
+    assert "if self._runtime_service_blocked('/inspection/start'):" in text
+    assert "if self._runtime_service_blocked('/inspection/reset_fault'):" in text
+    assert "response.message = 'runtime is not active'" in text

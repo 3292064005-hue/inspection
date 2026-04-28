@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from inspection_utils.config import load_yaml, save_yaml
+from inspection_utils.config_common import load_yaml, save_yaml
 
 
 def utc_now() -> str:
@@ -249,6 +249,62 @@ class RecipeActivationService:
             'appliedBatchId': str(applied_batch_id),
             'appliedAt': str(applied_at),
         }
+
+    def validate_activation_candidate(self, *, recipe_id: str, batch_id: str, operator: str) -> dict[str, Any]:
+        """Validate a recipe activation candidate without mutating runtime state.
+
+        Args:
+            recipe_id: Target recipe identifier.
+            batch_id: Batch identifier used to exercise the start-contract shape.
+            operator: Operator name that would be recorded on commit.
+
+        Returns:
+            A staged activation receipt and preflight metadata that can be
+            committed by :meth:`activate` after all checks pass.
+
+        Raises:
+            FileNotFoundError: The requested recipe does not exist.
+            RuntimeError: The target recipe or generated candidate receipt is
+                internally inconsistent.
+
+        Boundary behavior:
+            No recipe files, default recipe snapshot, activation history, or
+            current activation pointer are written. This is the pre-commit gate
+            used by switch-recipe dry runs and transaction-safe activation.
+        """
+        requested_recipe_id = str(recipe_id or '').strip()
+        if not requested_recipe_id:
+            raise RuntimeError('requested recipe id missing')
+        recipe = self.repository.load_by_id(requested_recipe_id)
+        if not recipe:
+            raise FileNotFoundError(f'recipe not found: {requested_recipe_id}')
+        previous = self.repository.current_default()
+        previous_id = str(previous.get('recipe_id', '')) if isinstance(previous, dict) else ''
+        cloned = dict(recipe)
+        cloned.pop('_path', None)
+        expected_generation = self.config_generation(cloned)
+        receipt = self.build_activation_receipt(recipe=cloned, recipe_id=requested_recipe_id, operator=str(operator or 'hmi_operator'), previous_recipe_id=previous_id, activation_state='PENDING_START')
+        if str(receipt.get('recipeId', '')) != requested_recipe_id:
+            raise RuntimeError('staged activation receipt recipe does not match requested recipe')
+        if str(receipt.get('configGeneration', '')) != expected_generation:
+            raise RuntimeError('staged activation generation does not match recipe snapshot')
+        staged_default_id = str(cloned.get('recipe_id', '') or cloned.get('id', '')).strip()
+        if staged_default_id and staged_default_id != requested_recipe_id:
+            raise RuntimeError('staged default recipe snapshot does not match requested recipe')
+        staged_default_generation = self.config_generation(cloned)
+        if staged_default_generation != expected_generation:
+            raise RuntimeError('staged default recipe snapshot generation mismatch')
+        preflight = {
+            'executed': True,
+            'valid': True,
+            'mode': 'pre_activation_candidate',
+            'recipeId': requested_recipe_id,
+            'batchId': str(batch_id),
+            'recipeVersion': str(recipe.get('version', receipt.get('recipeVersion', '1.0.0'))),
+            'configGeneration': expected_generation,
+            'message': 'staged activation receipt and default recipe snapshot satisfy the start preflight contract.',
+        }
+        return {'activation': dict(receipt), 'recipeId': requested_recipe_id, 'batchId': str(batch_id), 'recipeVersion': str(recipe.get('version', receipt.get('recipeVersion', '1.0.0'))), 'configGeneration': expected_generation, 'preflight': preflight, 'commitRequired': True, 'stateMutated': False}
 
     def activate(self, recipe_id: str, *, operator: str = 'hmi_operator') -> dict[str, Any]:
         recipe = self.repository.load_by_id(recipe_id)

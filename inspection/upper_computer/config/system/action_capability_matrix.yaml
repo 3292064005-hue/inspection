@@ -1,0 +1,121 @@
+actions:
+  start_batch:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 正式批次启动链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  reset_station:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 正式复位与恢复链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  execute_replay:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 回放与对比分析链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  export_batch:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 批次导出链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  run_benchmark:
+    availability: internal_tooling
+    visibility: hidden
+    execution_policy: allowed
+    runtime_truth: synthetic
+    summary: 内部合成基准动作，仅用于性能回归与 QA，不计入生产业务指标。
+    blocked_reason: ''
+    public_catalog: false
+    generated_client: false
+    delivery_class: qa_tooling
+  switch_recipe_with_validation:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 配方校验与激活链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  stop_station:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 正式停线控制链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  set_maintenance_mode:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 维护模式切换链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  create_batch:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 批次创建链路。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  diagnostic_capture_frame:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 维护态抓图诊断动作，复用正式诊断服务。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  diagnostic_test_lighting:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 维护态补光测试动作，复用正式诊断服务。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official
+  diagnostic_test_sort_actuator:
+    availability: production_ready
+    visibility: visible
+    execution_policy: allowed
+    runtime_truth: real
+    summary: 维护态分拣执行器测试动作，复用正式诊断服务。
+    blocked_reason: ''
+    public_catalog: true
+    generated_client: true
+    delivery_class: official

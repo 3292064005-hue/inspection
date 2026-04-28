@@ -1,7 +1,10 @@
 sim_mode: false
 adapter_name: serial
 protocol_version: v1
-supported_action_codes: [1, 2, 3]
+supported_action_codes:
+- 1
+- 2
+- 3
 feed_timeout_sec: 1.5
 position_timeout_sec: 3.0
 capture_frame_timeout_sec: 1.0
@@ -21,3 +24,4 @@ serial_port: /dev/ttyUSB0
 ack_stale_timeout_sec: 5.0
 heartbeat_watchdog_sec: 3.0
 enable_startup_handshake: true
+station_capability_profile: stm32_station_default

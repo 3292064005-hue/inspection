@@ -14,7 +14,7 @@ def service(context: GatewayAppContext = Depends(get_context)) -> AuditQueryServ
     return AuditQueryService(context)
 
 
-@router.get('/audit')
+@router.get('/audit', operation_id='getAuditEntries')
 async def get_audit(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),

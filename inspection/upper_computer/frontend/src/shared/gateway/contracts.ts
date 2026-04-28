@@ -1,4 +1,7 @@
 import type {
+  ActionCapabilityMatrix,
+  ActionCatalogEntry,
+  ActionJobUpdate,
   AuthSession,
   CameraFrame,
   CameraFrameSemantic,
@@ -10,16 +13,22 @@ import type {
   FaultEvent,
   HeartbeatStatus,
   InspectionResult,
+  ObservedInspectionResult,
   OrchestratorAdviceEvent,
   ReadModelStatus,
   RecipeProfile,
   ResultQuery,
+  ResultStatisticsQuery,
+  ResultStatisticsSnapshot,
   StationStateSnapshot,
 } from '@/shared/types/domain';
 
 export interface GatewayEventMap {
   'station.state.updated': StationStateSnapshot;
   'station.count.updated': CountStats;
+  'inspection.result.observed': ObservedInspectionResult;
+  'inspection.result.finalized': InspectionResult;
+  /** @deprecated Rollback-only compatibility alias; first-party consumers use inspection.result.finalized. */
   'inspection.result.created': InspectionResult;
   'fault.raised': FaultEvent;
   'fault.cleared': { id: string };
@@ -27,6 +36,7 @@ export interface GatewayEventMap {
   'system.heartbeat': HeartbeatStatus;
   'auth.session': AuthSession;
   'orchestrator.advice': OrchestratorAdviceEvent;
+  'action.job.updated': ActionJobUpdate;
 }
 
 export type GatewayEventName = keyof GatewayEventMap;
@@ -88,6 +98,7 @@ export interface HmiGateway {
   setMaintenanceMode(enabled: boolean): Promise<StationStateSnapshot>;
   newBatch(): Promise<string>;
   getResults(query?: ResultQuery): Promise<InspectionResult[]>;
+  getResultStatistics?(query?: ResultStatisticsQuery): Promise<ResultStatisticsSnapshot>;
   getResultDetail?(resultId: string): Promise<InspectionResult>;
   getReadModelStatus?(): Promise<ReadModelStatus>;
   repairReadModel?(): Promise<ReadModelStatus>;
@@ -97,5 +108,7 @@ export interface HmiGateway {
   getDiagnostics(): Promise<DiagnosticsItem[]>;
   runDiagnosticAction(action: DiagnosticAction): Promise<DiagnosticsActionResult>;
   exportBatch(batchId: string): Promise<{ url: string; jobId?: string }>;
+  getActionCatalog?(includeNonProduction?: boolean): Promise<ActionCatalogEntry[]>;
+  getActionCapabilityMatrix?(): Promise<ActionCapabilityMatrix>;
   getAuditEntries?(limit?: number, offset?: number): Promise<AuditEntry[]>;
 }

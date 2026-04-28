@@ -1,0 +1,13 @@
+string output_topic
+int32 item_id
+string batch_id
+string trace_id
+string decision
+int32 action_code
+string target_bin
+string matched_rule_id
+int32 matched_rule_priority
+float32 confidence
+string severity
+string schema_version
+string payload_json

@@ -9,7 +9,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from inspection_bringup.runtime_launch_config import build_launch_runtime_payload
-from inspection_utils.param_parsing import coerce_bool
+from inspection_utils.config_common import coerce_bool
 
 
 
@@ -45,24 +45,24 @@ def _launch_setup(context, *_args, **_kwargs):
         Node(package='vision_processing', executable='vision_processor_node', name='vision_processor_node', parameters=[{'recipe_path': resolved['recipe_path'], 'output_dir': log_root, 'camera_config_path': resolved['camera_config_path'], 'profile_name': profile_name, 'profile_config_path': resolved['profile_path'], 'compatibility_path': resolved['compatibility_path']}, managed_runtime_params]),
         Node(package='inspection_logger', executable='logger_node', name='inspection_logger_node', parameters=[{'log_root': log_root, 'recipe_path': resolved['recipe_path'], 'station_config_path': resolved['station_config_path'], 'camera_config_path': resolved['camera_config_path'], 'profile_name': profile_name, 'profile_config_path': resolved['profile_path']}, managed_runtime_params]),
         Node(package='inspection_diagnostics', executable='diagnostics_node', name='inspection_diagnostics_node', parameters=[{'enable_annotated_image_diagnostics': coerce_bool(enable_annotated_image_diagnostics, default=False)}, managed_runtime_params]),
-        Node(package='inspection_supervisor', executable='supervisor_node', name='inspection_supervisor_node', parameters=[{'profile_name': profile_name, 'autostart_mode': 'BENCHMARK'}, managed_runtime_params]),
+        Node(package='inspection_supervisor', executable='supervisor_node', name='inspection_supervisor_node', parameters=[{'profile_name': profile_name, 'autostart_mode': 'BENCHMARK'}]),
         Node(package='inspection_orchestrator', executable='orchestrator_node', name='inspection_orchestrator_node', parameters=[orchestrator_config_path, managed_runtime_params]),
     ]
 
 
 def generate_launch_description() -> LaunchDescription:
     bringup_share = Path(get_package_share_directory('inspection_bringup'))
-    default_recipe_path = str(bringup_share / 'config' / 'recipes' / 'default_recipe.yaml')
-    default_station_config = str(bringup_share / 'config' / 'station' / 'station.yaml')
-    default_camera_config = str(bringup_share / 'config' / 'camera' / 'camera.yaml')
-    default_compatibility_path = str(bringup_share / 'config' / 'compatibility' / 'matrix.yaml')
+    default_recipe_path = (bringup_share / 'config' / 'recipes' / 'default_recipe.yaml').as_posix()
+    default_station_config = (bringup_share / 'config' / 'station' / 'station.yaml').as_posix()
+    default_camera_config = (bringup_share / 'config' / 'camera' / 'camera.yaml').as_posix()
+    default_compatibility_path = (bringup_share / 'config' / 'compatibility' / 'matrix.yaml').as_posix()
     return LaunchDescription([
         DeclareLaunchArgument('recipe_path', default_value=default_recipe_path),
         DeclareLaunchArgument('station_config_path', default_value=default_station_config),
         DeclareLaunchArgument('camera_config_path', default_value=default_camera_config),
         DeclareLaunchArgument('profile_name', default_value='benchmark'),
         DeclareLaunchArgument('compatibility_path', default_value=default_compatibility_path),
-        DeclareLaunchArgument('orchestrator_config_path', default_value=str(bringup_share / 'config' / 'system' / 'orchestrator.yaml')),
+        DeclareLaunchArgument('orchestrator_config_path', default_value=(bringup_share / 'config' / 'system' / 'orchestrator.yaml').as_posix()),
         DeclareLaunchArgument('enable_annotated_image_diagnostics', default_value='false'),
         DeclareLaunchArgument('log_root', default_value='logs/runtime'),
         DeclareLaunchArgument('managed_runtime_enabled', default_value='true'),

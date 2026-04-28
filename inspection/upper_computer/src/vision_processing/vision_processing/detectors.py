@@ -9,9 +9,9 @@ import json
 import cv2
 import numpy as np
 
-from inspection_utils.image_tools import crop_roi
-from inspection_utils.plugin_contracts import PluginManifest
-from inspection_utils.models import DetectionSummary
+from inspection_utils.vision_common import crop_roi
+from inspection_utils.vision_common import PluginManifest
+from inspection_utils.model_common import DetectionSummary
 from .evidence_schema import detector_evidence
 from .pipeline.detector_registry import DetectorRegistry
 from .pipeline.pipeline_manager import PipelineManager
@@ -194,9 +194,9 @@ class NormalizeBrightnessStage(PipelineStage):
 
 
 REGISTRY = DetectorRegistry()
-REGISTRY.register('color', ColorDetector, manifest=PluginManifest(kind='detector', name='color', capabilities=('COLOR_CLASSIFICATION',), runtime_truth='real', source='builtin'))
-REGISTRY.register('qr', QRDetector, manifest=PluginManifest(kind='detector', name='qr', capabilities=('QR_DECODE',), runtime_truth='real', source='builtin'))
-REGISTRY.register('shape', ShapeDetector, manifest=PluginManifest(kind='detector', name='shape', capabilities=('SHAPE_ANALYSIS', 'ORIENTATION_CHECK'), runtime_truth='real', source='builtin'))
+REGISTRY.register('color', ColorDetector, manifest=PluginManifest(kind='detector', name='color', capabilities=('COLOR_CLASSIFICATION',), runtime_truth='real', source='builtin', owner_plane='vision_processing', verification_requirements=('capture_process_decision_cycle',)))
+REGISTRY.register('qr', QRDetector, manifest=PluginManifest(kind='detector', name='qr', capabilities=('QR_DECODE',), runtime_truth='real', source='builtin', owner_plane='vision_processing', verification_requirements=('capture_process_decision_cycle',)))
+REGISTRY.register('shape', ShapeDetector, manifest=PluginManifest(kind='detector', name='shape', capabilities=('SHAPE_ANALYSIS', 'ORIENTATION_CHECK'), runtime_truth='real', source='builtin', owner_plane='vision_processing', verification_requirements=('capture_process_decision_cycle',)))
 
 
 @dataclass(frozen=True, slots=True)

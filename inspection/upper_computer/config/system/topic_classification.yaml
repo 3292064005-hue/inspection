@@ -1,0 +1,32 @@
+version: 1
+topics:
+  /inspection/image_raw:
+    class: core
+    requiredForReleaseEvidence: true
+    summary: 主链路采集输入。
+  /inspection/result:
+    class: core
+    requiredForReleaseEvidence: true
+    summary: 主链路视觉处理结果。
+  /inspection/decision:
+    class: core
+    requiredForReleaseEvidence: true
+    summary: 主链路分拣决策输出。
+  /inspection/station/state:
+    class: core
+    requiredForReleaseEvidence: true
+    summary: 主链路工位状态反馈。
+  /inspection/result_raw:
+    class: diagnostic
+    requiredForReleaseEvidence: false
+    profile: full-diagnostics
+    summary: 诊断原始结果旁路，不计入主链成功口径。
+  /inspection/image_annotated:
+    class: diagnostic
+    requiredForReleaseEvidence: false
+    profile: full-diagnostics
+    summary: 诊断标注图像旁路，不计入主链成功口径。
+  /inspection/diagnostics:
+    class: diagnostic
+    requiredForReleaseEvidence: false
+    summary: 聚合诊断输出，不作为 runtime ready 必要条件。

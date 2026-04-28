@@ -1,0 +1,143 @@
+actions:
+  start_batch:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification:
+    - sim_closed_loop
+    - full_hardware_closed_loop
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/start-batch
+    operationId: submitStartBatchAction
+  reset_station:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification:
+    - upper_computer_with_stm32
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/reset-station
+    operationId: submitResetStationAction
+  execute_replay:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification: []
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/execute-replay
+    operationId: submitExecuteReplayAction
+  export_batch:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification: []
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/export-batch
+    operationId: submitExportBatchAction
+  run_benchmark:
+    tier: qa_tooling
+    lifecycle: internal
+    sunsetRelease: ''
+    promotionCriteria:
+    - 若需公开为生产动作，必须接入真实负载、真实验收指标与生产指标隔离报告。
+    requiredVerification: []
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 内部合成
+    apiPath: /api/internal/actions/run-benchmark
+    operationId: submitRunBenchmarkAction
+  switch_recipe_with_validation:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification:
+    - sim_closed_loop
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/switch-recipe
+    operationId: submitSwitchRecipeAction
+  stop_station:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification: []
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/stop-station
+    operationId: submitStopStationAction
+  set_maintenance_mode:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification:
+    - maintenance_mode_gate
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/set-maintenance-mode
+    operationId: submitMaintenanceModeAction
+  create_batch:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification: []
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/create-batch
+    operationId: submitCreateBatchAction
+  diagnostic_capture_frame:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification:
+    - maintenance_mode_gate
+    - diagnostic_capture_frame
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/diagnostics/capture-frame
+    operationId: submitDiagnosticCaptureFrameAction
+  diagnostic_test_lighting:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification:
+    - maintenance_mode_gate
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/diagnostics/test-lighting
+    operationId: submitDiagnosticTestLightingAction
+  diagnostic_test_sort_actuator:
+    tier: official
+    lifecycle: ga
+    sunsetRelease: ''
+    promotionCriteria: []
+    requiredVerification:
+    - maintenance_mode_gate
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    uiLabel: 正式
+    apiPath: /api/v1/actions/diagnostics/test-sort-actuator
+    operationId: submitDiagnosticTestSortActuatorAction

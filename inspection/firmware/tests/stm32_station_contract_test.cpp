@@ -19,9 +19,13 @@ int main() {
   frame[4] ^= 0xFF;
   assert(!decode_frame(frame, decoded));
 
-  assert(is_supported_action_code(0x01));
-  assert(is_supported_action_code(0x03));
-  assert(!is_supported_action_code(0x00));
-  assert(!is_supported_action_code(0x04));
+const auto supported_codes = supported_action_codes();
+assert(supported_codes.size() == 3U);
+assert(supported_codes[0] == 0x01U);
+assert(supported_codes[2] == 0x03U);
+assert(is_supported_action_code(0x01));
+assert(is_supported_action_code(0x03));
+assert(!is_supported_action_code(0x00));
+assert(!is_supported_action_code(0x04));
   return 0;
 }

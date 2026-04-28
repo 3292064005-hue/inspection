@@ -11,16 +11,21 @@ import SectionCard from '@/widgets/SectionCard.vue';
 const stationStore = useStationStore();
 const inspectionStore = useInspectionStore();
 
-function percentile(values: number[], p: number): number {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
-  return sorted[index];
-}
-
-const samples = computed(() => [...inspectionStore.recentResults].slice(0, 40).reverse());
-const cycleValues = computed(() => samples.value.map((item) => item.cycleMs));
-const p95Cycle = computed(() => percentile(cycleValues.value, 95));
+const statistics = computed(() => inspectionStore.statistics);
+const summary = computed(() => statistics.value?.summary ?? {
+  total: 0,
+  okCount: 0,
+  ngCount: 0,
+  recheckCount: 0,
+  yieldRate: 0,
+  avgCycleMs: 0,
+  p95CycleMs: 0,
+  sampleCount: 0,
+});
+const cycleTrend = computed(() => statistics.value?.cycleTrend ?? []);
+const decisionBreakdown = computed(() => statistics.value?.decisionBreakdown ?? []);
+const defectBreakdown = computed(() => statistics.value?.defectBreakdown ?? []);
+const recipeBreakdown = computed(() => statistics.value?.recipeBreakdown ?? []);
 
 const cycleTrendOption = computed<EChartsOption>(() => ({
   backgroundColor: 'transparent',
@@ -28,7 +33,7 @@ const cycleTrendOption = computed<EChartsOption>(() => ({
   grid: { top: 24, left: 24, right: 18, bottom: 28, containLabel: true },
   xAxis: {
     type: 'category' as const,
-    data: samples.value.map((_, index) => `#${index + 1}`),
+    data: cycleTrend.value.map((_, index) => `#${index + 1}`),
     axisLabel: { color: '#94a3b8' },
     axisLine: { lineStyle: { color: '#334155' } },
   },
@@ -42,7 +47,7 @@ const cycleTrendOption = computed<EChartsOption>(() => ({
       name: '节拍',
       type: 'line' as const,
       smooth: true,
-      data: samples.value.map((item) => item.cycleMs),
+      data: cycleTrend.value.map((item) => item.cycleMs),
     },
   ],
 }));
@@ -53,7 +58,7 @@ const decisionStackOption = computed<EChartsOption>(() => ({
   grid: { top: 24, left: 24, right: 18, bottom: 28, containLabel: true },
   xAxis: {
     type: 'category' as const,
-    data: samples.value.map((_, index) => `#${index + 1}`),
+    data: decisionBreakdown.value.map((item) => item.decision),
     axisLabel: { color: '#94a3b8' },
     axisLine: { lineStyle: { color: '#334155' } },
   },
@@ -63,71 +68,53 @@ const decisionStackOption = computed<EChartsOption>(() => ({
     splitLine: { lineStyle: { color: '#1e293b' } },
   },
   series: [
-    { name: 'OK', type: 'bar' as const, stack: 'decision', data: samples.value.map((item) => item.decision === 'OK' ? 1 : 0) },
-    { name: 'NG', type: 'bar' as const, stack: 'decision', data: samples.value.map((item) => item.decision === 'NG' ? 1 : 0) },
-    { name: 'RECHECK', type: 'bar' as const, stack: 'decision', data: samples.value.map((item) => item.decision === 'RECHECK' ? 1 : 0) },
+    {
+      name: '数量',
+      type: 'bar' as const,
+      data: decisionBreakdown.value.map((item) => item.count),
+    },
   ],
 }));
 
-const defectTrendOption = computed<EChartsOption>(() => {
-  const defectMap = new Map<string, number>();
-  inspectionStore.recentResults.forEach((item) => {
-    const key = item.decision === 'OK' ? '无缺陷' : item.defectType ?? '未知';
-    defectMap.set(key, (defectMap.get(key) ?? 0) + 1);
-  });
-  return {
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'item' as const },
-    legend: { bottom: 0, textStyle: { color: '#cbd5e1' } },
-    series: [
-      {
-        name: '缺陷分布',
-        type: 'pie' as const,
-        radius: ['44%', '68%'],
-        data: Array.from(defectMap.entries()).map(([name, value]) => ({ name, value })),
-        label: { color: '#e2e8f0' },
-      },
-    ],
-  };
-});
+const defectTrendOption = computed<EChartsOption>(() => ({
+  backgroundColor: 'transparent',
+  tooltip: { trigger: 'item' as const },
+  legend: { bottom: 0, textStyle: { color: '#cbd5e1' } },
+  series: [
+    {
+      name: '缺陷分布',
+      type: 'pie' as const,
+      radius: ['44%', '68%'],
+      data: defectBreakdown.value.map((item) => ({ name: item.name, value: item.count })),
+      label: { color: '#e2e8f0' },
+    },
+  ],
+}));
 
-const recipeYieldOption = computed<EChartsOption>(() => {
-  const recipeMap = new Map<string, { ok: number; total: number }>();
-  inspectionStore.recentResults.forEach((item) => {
-    const current = recipeMap.get(item.recipeName) ?? { ok: 0, total: 0 };
-    current.total += 1;
-    current.ok += item.decision === 'OK' ? 1 : 0;
-    recipeMap.set(item.recipeName, current);
-  });
-  const labels = Array.from(recipeMap.keys());
-  return {
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' as const },
-    grid: { top: 24, left: 24, right: 18, bottom: 28, containLabel: true },
-    xAxis: {
-      type: 'category' as const,
-      data: labels,
-      axisLabel: { color: '#94a3b8', rotate: 18 },
-      axisLine: { lineStyle: { color: '#334155' } },
+const recipeYieldOption = computed<EChartsOption>(() => ({
+  backgroundColor: 'transparent',
+  tooltip: { trigger: 'axis' as const },
+  grid: { top: 24, left: 24, right: 18, bottom: 28, containLabel: true },
+  xAxis: {
+    type: 'category' as const,
+    data: recipeBreakdown.value.map((item) => item.recipeName),
+    axisLabel: { color: '#94a3b8', rotate: 18 },
+    axisLine: { lineStyle: { color: '#334155' } },
+  },
+  yAxis: {
+    type: 'value' as const,
+    max: 100,
+    axisLabel: { color: '#94a3b8' },
+    splitLine: { lineStyle: { color: '#1e293b' } },
+  },
+  series: [
+    {
+      name: '良率 %',
+      type: 'bar' as const,
+      data: recipeBreakdown.value.map((item) => Number((item.yieldRate * 100).toFixed(1))),
     },
-    yAxis: {
-      type: 'value' as const,
-      max: 100,
-      axisLabel: { color: '#94a3b8' },
-      splitLine: { lineStyle: { color: '#1e293b' } },
-    },
-    series: [
-      {
-        name: '良率 %',
-        type: 'bar' as const,
-        data: labels.map((label) => {
-          const current = recipeMap.get(label);
-          return current && current.total ? Number(((current.ok / current.total) * 100).toFixed(1)) : 0;
-        }),
-      },
-    ],
-  };
-});
+  ],
+}));
 </script>
 
 <template>
@@ -151,34 +138,37 @@ const recipeYieldOption = computed<EChartsOption>(() => {
 
     <div class="space-y-3">
       <div class="px-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">运行指标</div>
-      <div class="grid gap-4 xl:grid-cols-2">
-        <SectionCard title="当前良率" subtitle="来自运行统计">
-          <div class="flex h-full items-center justify-center text-4xl font-semibold text-sky-200">{{ (stationStore.stats.yieldRate * 100).toFixed(1) }}%</div>
+      <div class="grid gap-4 xl:grid-cols-3">
+        <SectionCard title="查询良率" subtitle="来自正式统计查询面">
+          <div class="flex h-full items-center justify-center text-4xl font-semibold text-sky-200">{{ (summary.yieldRate * 100).toFixed(1) }}%</div>
         </SectionCard>
-        <SectionCard title="P95 节拍" subtitle="最近 40 件运行样本">
-          <div class="flex h-full items-center justify-center text-4xl font-semibold text-amber-200">{{ p95Cycle.toFixed(0) }} ms</div>
+        <SectionCard title="P95 节拍" subtitle="来自 query-driven 样本窗口">
+          <div class="flex h-full items-center justify-center text-4xl font-semibold text-amber-200">{{ summary.p95CycleMs.toFixed(0) }} ms</div>
+        </SectionCard>
+        <SectionCard title="样本总数" subtitle="与最近结果缓存解耦">
+          <div class="flex h-full items-center justify-center text-4xl font-semibold text-emerald-200">{{ summary.total }}</div>
         </SectionCard>
       </div>
     </div>
 
     <div class="grid flex-1 gap-4 xl:grid-cols-2">
-      <KpiChart title="最近样本节拍趋势" :option="cycleTrendOption" />
-      <KpiChart title="最近样本结果堆叠" :option="decisionStackOption" />
+      <KpiChart title="查询样本节拍趋势" :option="cycleTrendOption" />
+      <KpiChart title="结果分布" :option="decisionStackOption" />
       <KpiChart title="缺陷类型分布" :option="defectTrendOption" />
       <KpiChart title="配方维度良率对比" :option="recipeYieldOption" />
-      <SectionCard title="运行稳定性指标" subtitle="仅展示实时运行指标，不与验收目标混用。">
+      <SectionCard title="运行稳定性指标" subtitle="统计页主数据来自结果查询面，运行快照仍展示实时工位指标。">
         <div class="grid gap-3 md:grid-cols-2">
           <div class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
             <div class="data-label">连续运行次数</div>
             <div class="mt-2 text-2xl font-semibold text-slate-100">{{ stationStore.stats.continuousRunCount }}</div>
           </div>
           <div class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
-            <div class="data-label">平均节拍</div>
+            <div class="data-label">实时平均节拍</div>
             <div class="mt-2 text-2xl font-semibold text-slate-100">{{ stationStore.stats.avgCycleMs.toFixed(1) }} ms</div>
           </div>
           <div class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
-            <div class="data-label">最近样本数</div>
-            <div class="mt-2 text-2xl font-semibold text-slate-100">{{ inspectionStore.recentResults.length }}</div>
+            <div class="data-label">查询样本窗口</div>
+            <div class="mt-2 text-2xl font-semibold text-slate-100">{{ summary.sampleCount }}</div>
           </div>
           <div class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
             <div class="data-label">当前批次</div>

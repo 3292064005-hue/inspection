@@ -3,11 +3,17 @@ import { getGateway } from '@/shared/gateway/service';
 import { useAppStore } from '@/entities/app/store';
 import { useInspectionStore } from '@/entities/inspection/store';
 import { useStationStore } from '@/entities/station/store';
-import type { DiagnosticAction, DiagnosticsItem } from '@/shared/types/domain';
+import type { ActionCatalogEntry, DiagnosticAction, DiagnosticsItem } from '@/shared/types/domain';
 import { fetchWithCache, invalidateCache } from '@/shared/query/cache';
 import { deriveMaintenanceState } from '@/processes/maintenance-mode/machine';
 
 const cooldownMs = 6500;
+
+const DIAGNOSTIC_KIND_MAP: Record<DiagnosticAction, string> = {
+  CAPTURE_FRAME: 'diagnostic_capture_frame',
+  TEST_LIGHTING: 'diagnostic_test_lighting',
+  TEST_SORT_ACTUATOR: 'diagnostic_test_sort_actuator',
+};
 
 export function useDiagnostics() {
   const gateway = getGateway();
@@ -15,6 +21,7 @@ export function useDiagnostics() {
   const inspectionStore = useInspectionStore();
   const stationStore = useStationStore();
   const items = ref<DiagnosticsItem[]>([]);
+  const actionCatalog = ref<ActionCatalogEntry[]>([]);
   const loading = ref(false);
   const actionBusy = ref<DiagnosticAction | ''>('');
   const nowTick = ref(Date.now());
@@ -27,7 +34,12 @@ export function useDiagnostics() {
   async function load(force = false) {
     loading.value = true;
     try {
-      items.value = await fetchWithCache('diagnostics:list', () => gateway.getDiagnostics(), { ttlMs: 4000, force, allowStale: true });
+      const [diagnostics, catalog] = await Promise.all([
+        fetchWithCache('diagnostics:list', () => gateway.getDiagnostics(), { ttlMs: 4000, force, allowStale: true }),
+        fetchWithCache('diagnostics:action-catalog', () => gateway.getActionCatalog?.(true) ?? Promise.resolve([]), { ttlMs: 15000, force, allowStale: true }),
+      ]);
+      items.value = diagnostics;
+      actionCatalog.value = catalog;
     } catch (error) {
       appStore.pushNotice({ level: 'ERROR', title: '诊断读取失败', message: error instanceof Error ? error.message : '未知错误' });
     } finally {
@@ -50,6 +62,14 @@ export function useDiagnostics() {
     busy: actionBusy.value !== '',
     hasCooldown: Object.values(cooldownRemaining.value).some((value) => value > 0),
   }));
+
+  const diagnosticActionKinds = computed<Record<DiagnosticAction, string>>(() => ({ ...DIAGNOSTIC_KIND_MAP }));
+  const diagnosticGovernance = computed<Record<DiagnosticAction, ActionCatalogEntry | null>>(() => ({
+    CAPTURE_FRAME: actionCatalog.value.find((item) => item.kind === diagnosticActionKinds.value.CAPTURE_FRAME) ?? null,
+    TEST_LIGHTING: actionCatalog.value.find((item) => item.kind === diagnosticActionKinds.value.TEST_LIGHTING) ?? null,
+    TEST_SORT_ACTUATOR: actionCatalog.value.find((item) => item.kind === diagnosticActionKinds.value.TEST_SORT_ACTUATOR) ?? null,
+  }));
+  const governanceHighlights = computed(() => actionCatalog.value.filter((item) => item.governance.tier !== 'official' || !item.capability.submitEnabled));
 
   async function toggleMaintenance(enabled: boolean) {
     try {
@@ -116,6 +136,7 @@ export function useDiagnostics() {
 
   return {
     items,
+    actionCatalog,
     loading,
     actionBusy,
     cooldownRemaining,
@@ -124,6 +145,9 @@ export function useDiagnostics() {
     maintenanceRequested,
     maintenanceTransitionState,
     maintenanceState,
+    diagnosticActionKinds,
+    diagnosticGovernance,
+    governanceHighlights,
     load,
     run,
     toggleMaintenance,

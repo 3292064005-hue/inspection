@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+
+from inspection_supervisor.lifecycle_graph import load_runtime_topology
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,39 +16,54 @@ class LifecycleGovernanceSpec:
             ``standard_node``.
         lifecycle_mode: Expected runtime lifecycle mode.
         rationale: Short explanation for the assigned governance class.
+        fault_domain: Recovery / diagnostics fault domain label.
+        lifecycle_managed: Whether the node can receive lifecycle commands.
+        supervisor_monitored: Whether the node is tracked by the supervisor
+            health registry.
     """
 
     node: str
     governance_class: str
     lifecycle_mode: str
     rationale: str
+    fault_domain: str
+    lifecycle_managed: bool
+    supervisor_monitored: bool
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, str | bool]:
         return {
             'node': self.node,
             'governanceClass': self.governance_class,
             'lifecycleMode': self.lifecycle_mode,
             'rationale': self.rationale,
+            'faultDomain': self.fault_domain,
+            'lifecycleManaged': self.lifecycle_managed,
+            'supervisorMonitored': self.supervisor_monitored,
         }
 
-
-LIFECYCLE_GOVERNANCE_MATRIX: tuple[LifecycleGovernanceSpec, ...] = (
-    LifecycleGovernanceSpec('inspection_supervisor_node', 'native_required', 'native_service_only', 'supervisor must coordinate explicit node transitions and recovery'),
-    LifecycleGovernanceSpec('inspection_hmi_gateway_node', 'bridge_allowed', 'managed_runtime', 'gateway can operate with compatibility bridge while still exposing lifecycle state'),
-    LifecycleGovernanceSpec('inspection_action_executor_node', 'native_required', 'native_service_only', 'executor owns long-running action transport and should expose native lifecycle transitions'),
-    LifecycleGovernanceSpec('vision_processor_node', 'bridge_allowed', 'managed_runtime', 'vision processing must gate capture/analyze flow on lifecycle activation'),
-    LifecycleGovernanceSpec('inspection_diagnostics_node', 'bridge_allowed', 'managed_runtime', 'diagnostics should continue publishing governance state even without native lifecycle support'),
-    LifecycleGovernanceSpec('station_bridge_node', 'bridge_allowed', 'managed_runtime', 'device bridge must participate in recovery while supporting lightweight test environments'),
-    LifecycleGovernanceSpec('inspection_orchestrator_node', 'bridge_allowed', 'managed_runtime', 'orchestrator should follow managed mode transitions driven by the supervisor'),
-    LifecycleGovernanceSpec('inspection_fsm_node', 'bridge_allowed', 'managed_runtime', 'FSM owns cycle semantics and should remain transition-aware even under compatibility mode'),
-    LifecycleGovernanceSpec('camera_node', 'bridge_allowed', 'managed_runtime', 'camera transport should still participate in startup ordering when a managed wrapper is present'),
-    LifecycleGovernanceSpec('inspection_hmi_node', 'standard_node', 'best_effort', 'standalone HMI shell remains a standard utility node'),
-)
 
 _NODE_ALIASES = {
     'fsm_node': 'inspection_fsm_node',
     'vision_camera_node': 'camera_node',
+    'inspection_hmi_gateway_node': 'inspection_hmi_gateway_server',
 }
+
+
+@lru_cache(maxsize=1)
+def _governance_specs() -> tuple[LifecycleGovernanceSpec, ...]:
+    return tuple(
+        LifecycleGovernanceSpec(
+            node=spec.name,
+            governance_class=spec.governance_class,
+            lifecycle_mode=spec.lifecycle_mode,
+            rationale=spec.rationale,
+            fault_domain=spec.fault_domain,
+            lifecycle_managed=spec.lifecycle_managed,
+            supervisor_monitored=spec.supervisor_monitored,
+        )
+        for spec in load_runtime_topology()
+    )
+
 
 
 def normalize_governed_node_name(node_name: str) -> str:
@@ -54,18 +72,21 @@ def normalize_governed_node_name(node_name: str) -> str:
     return _NODE_ALIASES.get(normalized, normalized)
 
 
-def lifecycle_governance_matrix() -> list[dict[str, str]]:
+
+def lifecycle_governance_matrix() -> list[dict[str, str | bool]]:
     """Return the lifecycle governance matrix for diagnostics and tests."""
-    return [spec.to_dict() for spec in LIFECYCLE_GOVERNANCE_MATRIX]
+    return [spec.to_dict() for spec in _governance_specs()]
 
 
-def lifecycle_governance_for(node_name: str) -> dict[str, str] | None:
+
+def lifecycle_governance_for(node_name: str) -> dict[str, str | bool] | None:
     """Lookup lifecycle governance for a specific node name or alias."""
     name = normalize_governed_node_name(node_name)
-    for spec in LIFECYCLE_GOVERNANCE_MATRIX:
+    for spec in _governance_specs():
         if spec.node == name:
             return spec.to_dict()
     return None
+
 
 
 def governance_class_for(node_name: str) -> str:
@@ -74,9 +95,11 @@ def governance_class_for(node_name: str) -> str:
     return str(governance.get('governanceClass', 'standard_node')) if isinstance(governance, dict) else 'standard_node'
 
 
+
 def requires_native_lifecycle(node_name: str) -> bool:
     """Return ``True`` when a node must not fall back to topic lifecycle control."""
     return governance_class_for(node_name) == 'native_required'
+
 
 
 def allows_lifecycle_fallback(node_name: str) -> bool:
@@ -84,11 +107,13 @@ def allows_lifecycle_fallback(node_name: str) -> bool:
     return governance_class_for(node_name) == 'bridge_allowed'
 
 
+
 def is_standard_node(node_name: str) -> bool:
     """Return ``True`` when the node should not receive lifecycle transitions."""
     return governance_class_for(node_name) == 'standard_node'
 
 
+
 def governed_node_names() -> list[str]:
     """Return the ordered list of known lifecycle-governed nodes."""
-    return [spec.node for spec in LIFECYCLE_GOVERNANCE_MATRIX]
+    return [spec.node for spec in _governance_specs()]

@@ -12,7 +12,6 @@ from ..replay_service import ReplayService
 from .auth import AuthService
 from .persistence import MetadataRepository
 from .responses import utc_now
-from ..recipe_store import RecipeActivationError
 
 
 _request_id: ContextVar[str] = ContextVar('inspection_gateway_request_id', default='')
@@ -26,168 +25,6 @@ def set_request_id(value: str) -> None:
 
 def get_request_id() -> str:
     return _request_id.get()
-
-
-class _LegacyNodeFacadeAdapter:
-    """Adapt older gateway test doubles to the newer application-facade contract."""
-
-    def __init__(self, node: Any) -> None:
-        self._node = node
-        self.state = getattr(node, 'state', None)
-        self.recipe_store = getattr(node, 'recipe_store', None)
-        self.result_store = getattr(node, 'result_store', None)
-
-    def snapshot_payload(self) -> dict[str, Any]:
-        state = getattr(self._node, 'state', None)
-        return state.snapshot_payload() if state is not None and hasattr(state, 'snapshot_payload') else {}
-
-    def stats_payload(self) -> dict[str, Any]:
-        state = getattr(self._node, 'state', None)
-        return state.stats_payload() if state is not None and hasattr(state, 'stats_payload') else {}
-
-    def diagnostic_items(self) -> list[dict[str, Any]]:
-        state = getattr(self._node, 'state', None)
-        items = getattr(state, 'diagnostics', []) if state is not None else []
-        return [item for item in items if isinstance(item, dict)]
-
-    def refresh_recipes(self) -> list[dict[str, Any]]:
-        return self._node.refresh_recipes()
-
-    def recipe_history(self, recipe_id: str) -> dict[str, Any]:
-        store = self.recipe_store
-        return {
-            'activations': store.list_activation_history(recipe_id=recipe_id),
-            'revisions': store.list_revision_history(recipe_id=recipe_id),
-        }
-
-    def save_recipe(self, payload: dict[str, Any]) -> dict[str, Any]:
-        recipe = self.recipe_store.save_from_hmi(payload)
-        profiles = self.refresh_recipes()
-        target = next((item for item in profiles if item['id'] == str(recipe.get('recipe_id', ''))), None)
-        if target is None:
-            raise RuntimeError('配方保存后无法重新装载。')
-        return target
-
-    def activate_recipe(self, recipe_id: str, *, operator: str) -> dict[str, Any]:
-        receipt = self.recipe_store.activate(recipe_id, operator=operator)
-        self.refresh_recipes()
-        state = getattr(self._node, 'state', None)
-        if state is not None:
-            state.last_updated_at = utc_now()
-            if hasattr(state, 'recipe_activation_state'):
-                state.recipe_activation_state = str(receipt.get('activationState', ''))
-            if hasattr(state, 'active_recipe_version'):
-                state.active_recipe_version = str(receipt.get('recipeVersion', getattr(state, 'active_recipe_version', '')))
-            if hasattr(state, 'active_recipe_generation'):
-                state.active_recipe_generation = str(receipt.get('configGeneration', getattr(state, 'active_recipe_generation', '')))
-            if hasattr(state, 'guidance'):
-                state.guidance = '配方已切换，将在下一次启动任务时生效。'
-        return receipt
-
-    def query_results(self, **filters: Any) -> tuple[list[dict[str, Any]], int]:
-        return self.result_store.query_result_page(**filters)
-
-    def result_detail(self, result_id: str) -> dict[str, Any] | None:
-        return self.result_store.get_result(result_id)
-
-    def read_model_status(self) -> dict[str, Any]:
-        return self.result_store.read_model_status()
-
-    def repair_read_model(self) -> dict[str, Any]:
-        self.result_store.repair_read_model()
-        return self.result_store.read_model_status(refresh=False)
-
-    def batch_summary(self, *, batch_id: str) -> dict[str, Any]:
-        return self.result_store.batch_summary(batch_id=batch_id)
-
-    def artifact_url(self, path: str) -> str:
-        if hasattr(self._node, '_artifact_url'):
-            return self._node._artifact_url(path)
-        normalized = str(path or '').replace('\\', '/').lstrip('/')
-        return f'/artifacts/{normalized}' if normalized else ''
-
-    def call_start(self, *, recipe_id: str | None = None, batch_id: str | None = None) -> tuple[bool, str]:
-        state = getattr(self._node, 'state', None)
-        recipe_id = str(recipe_id or getattr(state, 'active_recipe_id', '') or '') if state is not None else str(recipe_id or '')
-        batch_id = str(batch_id or getattr(state, 'pending_batch_id', '') or getattr(state, 'batch_id', '') or '') if state is not None else str(batch_id or '')
-        if self.recipe_store is not None and recipe_id:
-            try:
-                preflight = self.recipe_store.preflight_start_request(recipe_id=recipe_id, batch_id=batch_id)
-                if state is not None and hasattr(state, 'active_recipe_version'):
-                    state.active_recipe_version = str(preflight.get('recipeVersion', getattr(state, 'active_recipe_version', '')))
-                if state is not None and hasattr(state, 'active_recipe_generation'):
-                    state.active_recipe_generation = str(preflight.get('configGeneration', getattr(state, 'active_recipe_generation', '')))
-            except (RecipeActivationError, FileNotFoundError) as exc:
-                activation = self.recipe_store.mark_activation_start_blocked(recipe_id=recipe_id, batch_id=batch_id, reason=str(exc))
-                if state is not None and hasattr(state, 'recipe_activation_state'):
-                    state.recipe_activation_state = str(activation.get('activationState', getattr(state, 'recipe_activation_state', '')))
-                if state is not None and hasattr(state, 'guidance'):
-                    state.guidance = f'启动前配方校验失败：{exc}'
-                return False, f'启动前配方校验失败：{exc}'
-        result = self._node.call_start()
-        if result and result[0] and self.recipe_store is not None and recipe_id:
-            try:
-                activation = self.recipe_store.mark_activation_start_requested(recipe_id=recipe_id, batch_id=batch_id)
-                if state is not None and hasattr(state, 'recipe_activation_state'):
-                    state.recipe_activation_state = str(activation.get('activationState', ''))
-                    if hasattr(state, 'active_recipe_version'):
-                        state.active_recipe_version = str(activation.get('recipeVersion', getattr(state, 'active_recipe_version', '')))
-                    if hasattr(state, 'active_recipe_generation'):
-                        state.active_recipe_generation = str(activation.get('configGeneration', getattr(state, 'active_recipe_generation', '')))
-                if state is not None and hasattr(state, 'guidance'):
-                    state.guidance = '启动请求已下发，等待运行链确认当前激活配方。'
-            except Exception:
-                pass
-        return result
-
-    def publish_control(self, action: str) -> None:
-        self._node.publish_control(action)
-
-    def request_capture(self, payload: dict[str, Any]) -> bool:
-        handler = getattr(self._node, 'request_capture', None)
-        return bool(handler(payload)) if callable(handler) else False
-
-    def reset_fault(self) -> tuple[bool, str]:
-        return self._node.reset_fault()
-
-    def new_batch(self) -> str:
-        return self._node.new_batch()
-
-    def request_maintenance_mode(self, enabled: bool, *, actor: str = 'anonymous') -> dict[str, Any]:
-        handler = getattr(self._node, 'request_maintenance_mode', None)
-        if callable(handler):
-            return handler(enabled, actor=actor)
-        state = getattr(self._node, 'state', None)
-        if state is not None:
-            current_supervisor_mode = ''
-            if hasattr(state, 'supervisor_mode'):
-                current_supervisor_mode = str(getattr(state, 'supervisor_mode', '') or '')
-            if hasattr(state, 'maintenance_requested'):
-                state.maintenance_requested = bool(enabled)
-            if hasattr(state, 'maintenance_active') and not enabled:
-                state.maintenance_active = False
-            if hasattr(state, 'maintenance_transition_state'):
-                state.maintenance_transition_state = 'ENTERING' if enabled else 'EXITING'
-            if hasattr(state, 'guidance'):
-                state.guidance = '维护模式请求已下发，等待控制链确认。'
-            if hasattr(state, 'snapshot_payload'):
-                snapshot = state.snapshot_payload()
-                if isinstance(snapshot, dict):
-                    maintenance = snapshot.get('maintenance')
-                    if isinstance(maintenance, dict):
-                        maintenance['requested'] = bool(enabled)
-                        maintenance['enabled'] = bool(maintenance.get('enabled', False))
-                        maintenance['transitionState'] = 'ENTERING' if enabled else 'EXITING'
-                        maintenance['supervisorMode'] = str(maintenance.get('supervisorMode', current_supervisor_mode))
-                        maintenance['source'] = 'legacy_adapter'
-                        snapshot['maintenance'] = maintenance
-                    if 'supervisorMode' in snapshot:
-                        snapshot['supervisorMode'] = current_supervisor_mode
-                    return snapshot
-        return {'maintenance': {'requested': bool(enabled), 'enabled': False, 'transitionState': 'ENTERING' if enabled else 'EXITING', 'supervisorMode': '', 'source': 'legacy_adapter'}}
-
-    def run_diagnostic_action(self, action: str) -> dict[str, Any]:
-        return self._node.run_diagnostic_action(action)
 
 
 @dataclass
@@ -209,16 +46,31 @@ class GatewayAppContext:
         return node
 
     def app(self) -> Any:
-        """Return the gateway application facade behind the ROS composition root."""
+        """Return the gateway runtime application service behind the ROS composition root.
+
+        Args:
+            None.
+
+        Returns:
+            The gateway application service used by HTTP handlers and services.
+
+        Raises:
+            RuntimeError: When the runtime does not expose the explicit
+                application service expected by the gateway HTTP layer.
+
+        Boundary behavior:
+            Production runtime composition must expose the explicit ``app``
+            service object so HTTP handlers, websocket bootstrapping, and
+            action jobs all bind to the same business boundary.
+        """
         if self._app_adapter is not None:
             return self._app_adapter
         node = self.node()
         app = getattr(node, 'app', None)
-        if app is not None:
-            self._app_adapter = app
-            return app
-        self._app_adapter = _LegacyNodeFacadeAdapter(node)
-        return self._app_adapter
+        if app is None:
+            raise RuntimeError('Gateway runtime must expose the application service.')
+        self._app_adapter = app
+        return app
 
     def export_service(self) -> BatchExportService:
         app = self.app()

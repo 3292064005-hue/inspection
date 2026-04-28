@@ -5,20 +5,34 @@ import threading
 import time
 from typing import Callable
 
+from inspection_utils.station_common import load_station_capability_expectation
+
 from .bridge_base import BridgeSignal
 
 
 class MockStationAdapter:
-    def __init__(self, position_delay_sec: float, sort_delay_sec: float) -> None:
+    def __init__(self, position_delay_sec: float, sort_delay_sec: float, *, capability_payload: dict[str, object] | None = None) -> None:
+        """Create the synthetic station adapter.
+
+        Args:
+            position_delay_sec: Delay before POSITION_READY is emitted.
+            sort_delay_sec: Delay before SORT_DONE is emitted.
+            capability_payload: Optional capability payload derived from the
+                station capability registry. When omitted, the adapter falls
+                back to the historic mock capability shape.
+
+        Boundary behavior:
+            The payload is copied defensively so tests and launch code can pass
+            mutable dictionaries without risking later mutation of adapter state.
+        """
         self.position_delay_sec = position_delay_sec
         self.sort_delay_sec = sort_delay_sec
         self._callback: Callable[[BridgeSignal], None] | None = None
-        self._capabilities = {
-            'protocol_version': 'v1',
-            'firmware_version': 'mock-v5',
-            'device_id': 'mock-station',
-            'features': ['SORT_ACK', 'HEARTBEAT', 'RESET_ACK', 'CAPABILITY_QUERY'],
-        }
+        expectation = load_station_capability_expectation('simulation_station_default', start=__file__)
+        base_payload = expectation.to_payload(firmware_version='mock-v5', device_id='mock-station')
+        if isinstance(capability_payload, dict):
+            base_payload.update(capability_payload)
+        self._capabilities = dict(base_payload)
 
     def set_callback(self, callback: Callable[[BridgeSignal], None]) -> None:
         self._callback = callback

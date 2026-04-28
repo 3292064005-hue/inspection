@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from inspection_utils.control_protocol import (
+from inspection_utils.transport_common import (
     CANCEL_COMMAND,
     ENTER_MANUAL_COMMAND,
     EXIT_MANUAL_COMMAND,

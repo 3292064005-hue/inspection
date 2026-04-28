@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import importlib.util
 import sys
 import types
@@ -142,19 +144,16 @@ def _declared_defaults(description: _LaunchDescription) -> dict[str, str]:
     return defaults
 
 
-def test_sim_stack_and_full_stack_launch_modules_import_without_relative_import_failures() -> None:
+def test_sim_stack_launch_module_imports_without_relative_import_failures() -> None:
     root = _ensure_package_roots()
     _install_launch_stubs(root)
     sim_module = _load_module(root / 'src' / 'inspection_bringup' / 'launch' / 'sim_stack.launch.py', 'inspection_tests.sim_stack_launch_smoke')
-    full_module = _load_module(root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py', 'inspection_tests.full_stack_launch_smoke')
 
     sim_description = sim_module.generate_launch_description()
-    full_description = full_module.generate_launch_description()
 
     assert isinstance(sim_description, _LaunchDescription)
-    assert isinstance(full_description, _LaunchDescription)
     assert sim_description.actions
-    assert full_description.actions
+    assert not (root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py').exists()
 
 
 def test_offline_replay_launch_uses_absolute_resource_defaults_and_managed_runtime_arguments() -> None:
@@ -217,3 +216,19 @@ def test_real_station_launch_uses_real_hardware_defaults() -> None:
     assert "DeclareLaunchArgument('sim_mode', default_value='false')" in text
     assert 'station_stm32.yaml' in text
     assert 'camera_esp32s3.yaml' in text
+
+
+
+def test_simulation_launch_payload_uses_mock_station_capability_profile() -> None:
+    from inspection_bringup import runtime_launch_config
+
+    payload = runtime_launch_config.build_launch_runtime_payload(
+        recipe_path='config/recipes/default_recipe.yaml',
+        station_config_path='config/station/station.yaml',
+        camera_config_path='config/camera/camera.yaml',
+        profile_name='simulation',
+        compatibility_path='config/compatibility/matrix.yaml',
+    )
+    station_params = payload['station_parameters']
+    assert station_params['adapter_name'] == 'mock'
+    assert station_params['station_capability_profile'] == 'simulation_station_default'

@@ -1,0 +1,101 @@
+events:
+  station.state.updated:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  station.count.updated:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  inspection.result.observed:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  inspection.result.finalized:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  inspection.result.created:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: legacy_optional_consumers
+    consumer_file: ''
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: false
+    deprecation_phase: sunset_planned
+    sunset_release: 2026.Q4
+    canonical_event: inspection.result.finalized
+    notes: first-party consumers have migrated to inspection.result.finalized; this alias is disabled by default and only returns during explicit rollback via INSPECTION_RESULT_CREATED_ALIAS_ENABLED=1
+  fault.raised:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  fault.cleared:
+    producer: app_components
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/app_components.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  camera.frame:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  system.heartbeat:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  auth.session:
+    producer: websocket_transport
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/server/websocket_transport.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  orchestrator.advice:
+    producer: runtime_projection
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/runtime_projection.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true
+  action.job.updated:
+    producer: action_job_service
+    producer_file: upper_computer/src/inspection_hmi_gateway/inspection_hmi_gateway/action_job_service.py
+    consumer: frontend/bootstrap
+    consumer_file: upper_computer/frontend/src/features/bootstrap/useHmiBootstrap.ts
+    handler_file: upper_computer/frontend/src/shared/gateway/httpGateway.ts
+    delivery: websocket
+    requiredConsumer: true

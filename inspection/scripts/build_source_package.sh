@@ -6,6 +6,9 @@ OUT_DIR="${ROOT_DIR}/dist"
 mkdir -p "$OUT_DIR"
 ARCHIVE_PATH="${OUT_DIR}/inspection_split_source_$(date +%Y%m%d_%H%M%S).tar.gz"
 
+python3 "$ROOT_DIR/scripts/render_split_release_manifest.py" --workspace-root "$ROOT_DIR" --package-class source_delivery >/dev/null
+python3 "$ROOT_DIR/scripts/render_split_release_manifest.py" --workspace-root "$ROOT_DIR" --package-class source_delivery --check
+
 tar \
   --exclude='./dist' \
   --exclude='./upper_computer/frontend/node_modules' \

@@ -10,8 +10,7 @@ import subprocess
 import sys
 
 
-def _emit(name: str, ok: bool, detail: str) -> None:
-    status = 'OK' if ok else 'FAIL'
+def _emit(name: str, status: str, detail: str) -> None:
     print(f'[{status}] {name}: {detail}')
 
 
@@ -49,57 +48,69 @@ def main() -> int:
     root = Path(args.workspace_root).resolve()
     failures = 0
 
+    linux_needed = args.mode in {'ci', 'release'}
     linux_ok = platform.system() == 'Linux'
-    _emit('os', linux_ok, platform.system())
-    if not linux_ok:
+    os_status = 'PASS' if linux_ok else ('FAIL' if linux_needed else 'SKIP')
+    _emit('os', os_status, platform.system())
+    if linux_needed and not linux_ok:
         failures += 1
 
     ubuntu = _ubuntu_version()
-    ubuntu_ok = True if args.mode != 'release' else ubuntu == '22.04'
-    _emit('ubuntu_release', ubuntu_ok, ubuntu or 'unknown')
-    if not ubuntu_ok:
+    ubuntu_needed = args.mode == 'release'
+    ubuntu_ok = ubuntu == '22.04' if ubuntu_needed else True
+    ubuntu_status = 'PASS' if ubuntu_ok and ubuntu_needed else ('SKIP' if not ubuntu_needed else 'FAIL')
+    _emit('ubuntu_release', ubuntu_status, ubuntu or 'unknown')
+    if ubuntu_needed and not ubuntu_ok:
         failures += 1
 
     py_ok = sys.version_info >= (3, 10)
-    _emit('python', py_ok, platform.python_version())
+    _emit('python', 'PASS' if py_ok else 'FAIL', platform.python_version())
     if not py_ok:
         failures += 1
 
-    node_major = _node_major()
     node_needed = args.require_node or args.mode in {'ci', 'release'}
+    node_major = _node_major() if node_needed else None
     node_ok = (node_major in {20, 22}) if node_needed else True
-    _emit('node', node_ok, str(node_major) if node_major is not None else 'missing')
+    node_status = 'PASS' if node_ok and node_needed else ('SKIP' if not node_needed else 'FAIL')
+    _emit('node', node_status, str(node_major) if node_major is not None else 'missing')
     if node_needed and not node_ok:
         failures += 1
 
     colcon_path = shutil.which('colcon')
     colcon_needed = args.require_colcon or args.mode == 'release'
     colcon_ok = bool(colcon_path) if colcon_needed else True
-    _emit('colcon', colcon_ok, colcon_path or 'missing')
+    colcon_status = 'PASS' if colcon_ok and colcon_needed else ('SKIP' if not colcon_needed else 'FAIL')
+    _emit('colcon', colcon_status, colcon_path or 'missing')
     if colcon_needed and not colcon_ok:
         failures += 1
 
     pio_path = shutil.which('platformio') or shutil.which('pio')
     pio_needed = args.require_platformio or args.mode == 'release'
     pio_ok = bool(pio_path) if pio_needed else True
-    _emit('platformio', pio_ok, pio_path or 'missing')
+    pio_status = 'PASS' if pio_ok and pio_needed else ('SKIP' if not pio_needed else 'FAIL')
+    _emit('platformio', pio_status, pio_path or 'missing')
     if pio_needed and not pio_ok:
         failures += 1
 
     manifest = root / 'release' / 'split_release_manifest.yaml'
     version_manifest = root / 'release' / 'version_manifest.yaml'
+    runtime_matrix = root / 'release' / 'runtime_validation_matrix.yaml'
+    split_deployment = root / 'docs' / 'SPLIT_DEPLOYMENT.md'
+    upper_architecture = root / 'upper_computer' / 'docs' / 'ARCHITECTURE.md'
     workflow = root / '.github' / 'workflows' / 'split_delivery_ci.yml'
-    for name, path in [('upper_computer', root / 'upper_computer'), ('firmware', root / 'firmware'), ('release_manifest', manifest), ('version_manifest', version_manifest), ('split_workflow', workflow)]:
+    for name, path in [('upper_computer', root / 'upper_computer'), ('firmware', root / 'firmware'), ('release_manifest', manifest), ('version_manifest', version_manifest), ('runtime_validation_matrix', runtime_matrix), ('split_deployment', split_deployment), ('upper_architecture', upper_architecture), ('split_workflow', workflow)]:
         ok = path.exists()
-        _emit(name, ok, str(path))
+        _emit(name, 'PASS' if ok else 'FAIL', str(path))
         if not ok:
             failures += 1
 
     ros_env = os.environ.get('ROS_DISTRO', '')
     expect_ros = (args.expect_ros or ('humble' if args.mode == 'release' else '')).strip()
-    ros_ok = True if not expect_ros else ros_env == expect_ros
-    _emit('ros_distro', ros_ok, ros_env or 'unset')
-    if not ros_ok:
+    ros_needed = bool(expect_ros)
+    ros_ok = True if not ros_needed else ros_env == expect_ros
+    ros_status = 'PASS' if ros_ok and ros_needed else ('SKIP' if not ros_needed else 'FAIL')
+    _emit('ros_distro', ros_status, ros_env or 'unset')
+    if ros_needed and not ros_ok:
         failures += 1
 
     return 0 if failures == 0 else 1

@@ -15,6 +15,10 @@ class PluginManifest:
     runtime_truth: str = 'real'
     source: str = 'builtin'
     config_schema: dict[str, Any] = field(default_factory=dict)
+    capability_profile: str = ''
+    owner_plane: str = ''
+    verification_requirements: tuple[str, ...] = ()
+    promotion_path: tuple[str, ...] = ('synthetic', 'internal', 'production_ready')
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -25,4 +29,8 @@ class PluginManifest:
             'runtimeTruth': self.runtime_truth,
             'source': self.source,
             'configSchema': dict(self.config_schema),
+            'capabilityProfile': self.capability_profile,
+            'ownerPlane': self.owner_plane,
+            'verificationRequirements': list(self.verification_requirements),
+            'promotionPath': list(self.promotion_path),
         }

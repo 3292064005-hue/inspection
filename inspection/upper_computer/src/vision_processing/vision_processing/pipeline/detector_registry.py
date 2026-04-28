@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
-from inspection_utils.plugin_contracts import PluginManifest
+from inspection_utils.vision_common import PluginManifest
 
 from ..plugins.plugin_loader import discover_detector_entry_points, load_manifest_plugins
 

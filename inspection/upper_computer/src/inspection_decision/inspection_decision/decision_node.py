@@ -5,19 +5,30 @@ import json
 import rclpy
 from std_msgs.msg import String
 
-from inspection_interfaces.msg import InspectionResult, SortCommand
-from inspection_utils.config import build_effective_runtime_bundle
-from inspection_utils.logging_tools import event_to_json, safe_json_loads
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.qos import qos_profile
-from inspection_utils.runtime_node import InspectionRuntimeNode
+try:
+    from inspection_interfaces.msg import DecisionPublishedEvent, InspectionResult, SortCommand
+except ImportError:  # pragma: no cover - ROS interface generation unavailable in unit-test environments
+    DecisionPublishedEvent = None
+    from inspection_interfaces.msg import InspectionResult, SortCommand
+from inspection_utils.config_common import build_effective_runtime_bundle
+from inspection_utils.logging_common import event_to_json, safe_json_loads
+from inspection_utils.runtime_common import ManagedNodeMixin
+from inspection_utils.runtime_common import qos_profile
+from inspection_utils.runtime_common import InspectionRuntimeNode
+from inspection_utils.runtime_event_contracts import DECISION_PUBLISHED_TOPIC_TYPED, populate_decision_published_message, publish_dual_runtime_event
+from inspection_utils.station_common import DECISION_OUTPUT_TOPIC
 from .arbitration_engine import ArbitrationEngine
 from .policy_engine import apply_policy_overrides
 from .rules import decide_with_trace
 
 
 class DecisionNode(ManagedNodeMixin, InspectionRuntimeNode):
-    """Decision node that maps validated inspection results to sort commands."""
+    """Decision node that maps validated inspection results to decision outputs.
+
+    The node only publishes the business decision product. Device execution is
+    delegated to the FSM, which transforms a buffered decision into a station
+    sort request once the control-state guards allow dispatch.
+    """
 
     def __init__(self) -> None:
         super().__init__('decision_node')
@@ -41,14 +52,26 @@ class DecisionNode(ManagedNodeMixin, InspectionRuntimeNode):
         )
         self.recipe = effective_bundle['recipe']
         self.arbitration = ArbitrationEngine(self.recipe)
-        self.pub = self.create_publisher(SortCommand, '/station/sort_cmd', qos_profile('result'))
+        self.pub = self.create_publisher(SortCommand, DECISION_OUTPUT_TOPIC, qos_profile('result'))
         self.event_pub = self.create_publisher(String, '/inspection/events', qos_profile('event'))
+        self.typed_decision_pub = self.create_publisher(DecisionPublishedEvent, DECISION_PUBLISHED_TOPIC_TYPED, qos_profile('event')) if DecisionPublishedEvent is not None else None
         self.sub = self.create_subscription(InspectionResult, '/inspection/result', self.on_result, qos_profile('result'))
         self.setup_managed_runtime(node_name='decision_node')
 
     def _emit_event(self, event_type: str, **fields) -> None:
+        payload_json = event_to_json(event_type, node='decision_node', **fields)
+        if event_type == 'decision_published':
+            publish_dual_runtime_event(
+                event_type='decision_published',
+                legacy_publisher=self.event_pub,
+                typed_publisher=self.typed_decision_pub,
+                typed_message_cls=DecisionPublishedEvent,
+                populate_message=populate_decision_published_message,
+                payload=safe_json_loads(payload_json),
+            )
+            return
         msg = String()
-        msg.data = event_to_json(event_type, node='decision_node', **fields)
+        msg.data = payload_json
         self.event_pub.publish(msg)
 
     def on_configure(self):
@@ -98,6 +121,7 @@ class DecisionNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.pub.publish(cmd)
         self._emit_event(
             'decision_published',
+            output_topic=DECISION_OUTPUT_TOPIC,
             item_id=result.item_id,
             batch_id=result.batch_id,
             trace_id=trace_id,

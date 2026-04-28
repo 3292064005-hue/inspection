@@ -65,6 +65,7 @@ def build_simulated_stack(*, deprecation_notice: str = '') -> LaunchDescription:
     frontend_dist = LaunchConfiguration('frontend_dist')
     hmi_port = LaunchConfiguration('hmi_port')
     users_path = LaunchConfiguration('users_path')
+    require_frontend_dist = LaunchConfiguration('require_frontend_dist')
 
     real_station = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(bringup_share / 'launch' / 'real_station.launch.py')),
@@ -105,7 +106,7 @@ def build_simulated_stack(*, deprecation_notice: str = '') -> LaunchDescription:
             'INSPECTION_HMI_RECIPE_ROOT': recipe_root,
             'INSPECTION_HMI_FRONTEND_DIST': frontend_dist,
             'INSPECTION_HMI_USERS_PATH': users_path,
-            'INSPECTION_HMI_REQUIRE_FRONTEND_DIST': '1',
+            'INSPECTION_HMI_REQUIRE_FRONTEND_DIST': require_frontend_dist,
             'INSPECTION_HMI_STRICT_USER_CONFIG': '1',
             'INSPECTION_ACTION_EXECUTOR_ENABLED': action_executor_enabled,
             'INSPECTION_NATIVE_ACTION_CLIENT_ENABLED': native_action_client_enabled,
@@ -124,6 +125,7 @@ def build_simulated_stack(*, deprecation_notice: str = '') -> LaunchDescription:
         DeclareLaunchArgument('frontend_dist', default_value=str(gateway_share / 'frontend' / 'dist')),
         DeclareLaunchArgument('hmi_port', default_value='8080'),
         DeclareLaunchArgument('users_path', default_value='config/system/hmi_users.yaml'),
+        DeclareLaunchArgument('require_frontend_dist', default_value='false'),
     ]
     if deprecation_notice:
         actions.append(LogInfo(msg=deprecation_notice))

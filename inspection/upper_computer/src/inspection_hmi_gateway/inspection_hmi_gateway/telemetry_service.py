@@ -4,7 +4,7 @@ import socket
 from typing import Any
 from urllib.parse import urlparse
 import yaml
-from inspection_utils.paths import resolve_resource_path
+from inspection_utils.io_common import resolve_resource_path
 class TelemetryService:
     def __init__(self, config_path: str = 'config/system/telemetry.yaml', *, probe_timeout_sec: float = 0.15) -> None:
         self.config_path = resolve_resource_path(config_path, package_name='inspection_hmi_gateway', start=__file__)

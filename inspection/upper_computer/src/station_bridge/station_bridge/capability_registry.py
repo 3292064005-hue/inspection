@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from inspection_utils.runtime_contract import normalize_protocol_version_label
+from inspection_utils.station_common import normalize_protocol_version_label
 
 
 @dataclass(slots=True)

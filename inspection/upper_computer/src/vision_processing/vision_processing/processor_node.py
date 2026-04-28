@@ -6,20 +6,21 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 try:
-    from inspection_interfaces.msg import CaptureRequest, InspectionResult
+    from inspection_interfaces.msg import CaptureRequest, InspectionResult, VisionFrameAcquiredEvent
 except ImportError:  # pragma: no cover - unit-test fallback without generated typed messages
-    CaptureRequest = None  # type: ignore[assignment]
+    CaptureRequest = VisionFrameAcquiredEvent = None  # type: ignore[assignment]
     from inspection_interfaces.msg import InspectionResult
-from inspection_utils.config import build_effective_runtime_bundle, ensure_dir
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.runtime_node import InspectionRuntimeNode
-from inspection_utils.qos import qos_profile
-from inspection_utils.paths import resolve_resource_path, resolve_runtime_path
-from inspection_utils.param_parsing import parameter_as_bool
-from inspection_utils.logging_tools import event_to_json, safe_json_loads
-from inspection_utils.transport_contracts import CAPTURE_REQUEST_TOPIC_TYPED, capture_request_payload_from_message, serialize_payload
-from inspection_utils.transport_adapters import legacy_payload_json_from_typed_message
-from inspection_utils.typed_interfaces import assert_typed_interfaces_available
+from inspection_utils.config_common import build_effective_runtime_bundle, ensure_dir
+from inspection_utils.runtime_common import ManagedNodeMixin
+from inspection_utils.runtime_common import InspectionRuntimeNode
+from inspection_utils.runtime_common import qos_profile
+from inspection_utils.io_common import resolve_resource_path, resolve_runtime_path
+from inspection_utils.config_common import parameter_as_bool
+from inspection_utils.logging_common import safe_json_loads
+from inspection_utils.transport_common import CAPTURE_REQUEST_TOPIC_TYPED, capture_request_payload_from_message, serialize_payload
+from inspection_utils.runtime_event_contracts import VISION_FRAME_ACQUIRED_TOPIC_TYPED, populate_vision_frame_acquired_message, publish_dual_runtime_event
+from inspection_utils.transport_common import normalized_payload_from_typed_message
+from inspection_utils.runtime_common import assert_typed_interfaces_available
 from .artifact_writer import ArtifactWriter
 from .detectors import compile_pipeline, detector_manifest_catalog
 from .frame_binding import FrameBindingBuffer
@@ -98,17 +99,29 @@ class VisionProcessorNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.capture_sub = self.create_subscription(String, '/inspection/capture_request', self.on_capture_request, qos_profile('control'))
         self.typed_capture_sub = self.create_subscription(CaptureRequest, CAPTURE_REQUEST_TOPIC_TYPED, self.on_typed_capture_request, qos_profile('control')) if CaptureRequest is not None else None
         self.event_pub = self.create_publisher(String, '/inspection/events', qos_profile('event'))
+        self.typed_vision_frame_event_pub = self.create_publisher(VisionFrameAcquiredEvent, VISION_FRAME_ACQUIRED_TOPIC_TYPED, qos_profile('event')) if VisionFrameAcquiredEvent is not None else None
         self.fallback_item_id = 0
         self.last_trace_id = ''
         self.last_trace_started_at = 0.0
         self.artifact_runtime = ProcessorArtifactRuntime(self)
         self.execution_runtime = ProcessorExecutionRuntime(self, self.artifact_runtime)
-        assert_typed_interfaces_available(consumer='vision_processor_node', symbols={'CaptureRequest': CaptureRequest})
+        assert_typed_interfaces_available(consumer='vision_processor_node', symbols={'CaptureRequest': CaptureRequest, 'VisionFrameAcquiredEvent': VisionFrameAcquiredEvent})
         self.setup_managed_runtime(node_name='vision_processor_node')
 
     def _emit_event(self, event_type: str, **fields) -> None:
+        payload_json = event_to_json(event_type, node='vision_processor_node', **fields)
+        if event_type == 'vision_frame_acquired':
+            publish_dual_runtime_event(
+                event_type='vision_frame_acquired',
+                legacy_publisher=self.event_pub,
+                typed_publisher=self.typed_vision_frame_event_pub,
+                typed_message_cls=VisionFrameAcquiredEvent,
+                populate_message=populate_vision_frame_acquired_message,
+                payload=safe_json_loads(payload_json),
+            )
+            return
         evt = String()
-        evt.data = event_to_json(event_type, node='vision_processor_node', **fields)
+        evt.data = payload_json
         self.event_pub.publish(evt)
 
     def on_configure(self):
@@ -174,10 +187,33 @@ class VisionProcessorNode(ManagedNodeMixin, InspectionRuntimeNode):
         Boundary behavior:
             Malformed payloads are normalized inside the execution runtime.
         """
-        self.execution_runtime.handle_capture_request(msg)
+        self.handle_capture_request_payload(safe_json_loads(msg.data))
+
+    def handle_capture_request_payload(self, payload: dict[str, object]) -> None:
+        """Forward one canonical capture request into the execution runtime.
+
+        Args:
+            payload: Canonical capture-request payload decoded from either the
+                legacy JSON topic or the typed message boundary.
+
+        Returns:
+            None. The request is either ignored when inactive or forwarded to
+            the runtime for immediate queueing/processing.
+
+        Raises:
+            No exception is intentionally raised from this boundary method.
+
+        Boundary behavior:
+            Inactive lifecycle states emit an audit event and drop the request
+            instead of rebuilding any legacy bridge payloads.
+        """
+        if not str(payload.get('batch_id', '')).strip():
+            payload = dict(payload)
+            payload['batch_id'] = self.default_batch_id
+        self.execution_runtime.handle_capture_request_payload(dict(payload))
 
     def on_typed_capture_request(self, msg) -> None:
-        """Normalize a typed capture request into the legacy JSON transport.
+        """Normalize a typed capture request into the canonical processing path.
 
         Args:
             msg: Generated ``CaptureRequest`` message or a compatible test double.
@@ -189,16 +225,10 @@ class VisionProcessorNode(ManagedNodeMixin, InspectionRuntimeNode):
             Any exception raised by the execution runtime.
 
         Boundary behavior:
-            When ``payload_json`` is empty the method synthesizes a legacy JSON
-            envelope from the typed fields to preserve backward compatibility.
+            Typed and legacy transports now converge on one canonical dict payload
+            before the execution runtime sees the request.
         """
-        legacy = String()
-        legacy.data = legacy_payload_json_from_typed_message(msg, default_event_type='capture_request')
-        payload = safe_json_loads(legacy.data)
-        if isinstance(payload, dict) and not str(payload.get('batch_id', '')).strip():
-            payload['batch_id'] = self.default_batch_id
-            legacy.data = event_to_json(str(payload.get('type', 'capture_request')), **{k: v for k, v in payload.items() if k != 'type'})
-        self.execution_runtime.handle_capture_request(legacy)
+        self.handle_capture_request_payload(normalized_payload_from_typed_message(msg, default_event_type='capture_request', bridge_name='capture_request'))
 
     def _build_output_name(self, item_id: int, trace_id: str) -> str:
         """Build the canonical artifact file stem for a processed frame.

@@ -70,6 +70,15 @@ def _install_runtime_stubs() -> None:
         class SupervisorStateEnvelope:
             pass
 
+        class SupervisorCommand:
+            def __init__(self) -> None:
+                self.command = ''
+                self.target_mode = ''
+                self.reason = ''
+                self.source = ''
+                self.schema_version = 'v1'
+                self.payload_json = ''
+
         class CaptureRequest:
             def __init__(self) -> None:
                 self.trace_id = ''
@@ -90,6 +99,7 @@ def _install_runtime_stubs() -> None:
         msg_mod.ControlCommand = ControlCommand
         msg_mod.DiagnosticsSnapshot = DiagnosticsSnapshot
         msg_mod.SupervisorStateEnvelope = SupervisorStateEnvelope
+        msg_mod.SupervisorCommand = SupervisorCommand
         msg_mod.CaptureRequest = CaptureRequest
         msg_mod.CountStats = CountStats
         msg_mod.FaultEvent = FaultEvent
@@ -147,7 +157,7 @@ def test_supervisor_runtime_callback_smoke_executes_node_name_normalization() ->
     assert payload['state'] == 'ACTIVE'
 
 
-def test_orchestrator_runtime_callbacks_and_publish_action_are_importable() -> None:
+def test_orchestrator_runtime_callbacks_and_publish_action_are_importable(monkeypatch) -> None:
     _install_runtime_stubs()
     _ensure_workspace_on_path()
     from inspection_orchestrator.orchestrator_node import OrchestratorNode
@@ -164,22 +174,31 @@ def test_orchestrator_runtime_callbacks_and_publish_action_are_importable() -> N
 
     OrchestratorNode.publish_action(node, 'pause', reason='smoke_test')
 
-    assert len(published) == 2
+    assert len(published) == 1
     typed = published[-1]
     assert typed.command == 'pause'
     assert typed.source == 'inspection_orchestrator_node'
     assert '"command":"pause"' in typed.payload_json.replace(' ', '')
 
+    monkeypatch.setenv('INSPECTION_TRANSPORT_LEGACY_CONTROL_ENABLED', '1')
+    published.clear()
+    OrchestratorNode.publish_action(node, 'pause', reason='legacy_enabled')
+    assert len(published) == 2
 
-def test_fsm_typed_control_bridge_synthesizes_legacy_payload_without_payload_json() -> None:
+
+def test_fsm_typed_control_bridge_normalizes_canonical_payload_without_payload_json() -> None:
     _install_runtime_stubs()
     _ensure_workspace_on_path()
-    from inspection_fsm.fsm_node import FSMNode
+    from inspection_fsm.fsm_ingress import FsmIngressAdapter
 
     captured = []
-
-    node = FSMNode.__new__(FSMNode)
-    node.on_control_message = lambda msg: captured.append(json.loads(msg.data))
+    node = types.SimpleNamespace(
+        _runtime_input_blocked=lambda _source: False,
+        emit_event=lambda *_args, **_kwargs: None,
+        apply_event=lambda event, reason: captured.append({'event': getattr(event, 'value', str(event)), 'reason': reason}),
+        runtime=types.SimpleNamespace(record_manual_action=lambda *_args, **_kwargs: None),
+        data=types.SimpleNamespace(trace_id='T-9', item_id=3),
+    )
 
     typed = types.SimpleNamespace(
         command='resume',
@@ -191,14 +210,11 @@ def test_fsm_typed_control_bridge_synthesizes_legacy_payload_without_payload_jso
         schema_version='v1',
         payload_json='',
     )
-    FSMNode.on_typed_control_message(node, typed)
+    adapter = FsmIngressAdapter(node)
+    adapter.on_typed_control_message(typed)
 
     assert captured
-    payload = captured[0]
-    assert payload['type'] == 'typed_control_bridge'
-    assert payload['command'] == 'resume'
-    assert payload['source'] == 'inspection_supervisor_node'
-    assert payload['trace_id'] == 'T-9'
+    assert captured[0]['reason'] == 'control:resume'
 
 
 def test_capture_request_transport_helpers_round_trip_without_payload_json() -> None:
@@ -237,7 +253,7 @@ def test_capture_request_transport_helpers_round_trip_without_payload_json() -> 
     assert '"cycle_index":9' in typed_out.payload_json.replace(' ', '')
 
 
-def test_fsm_publish_capture_request_keeps_legacy_and_typed_payloads_aligned() -> None:
+def test_fsm_publish_capture_request_keeps_legacy_and_typed_payloads_aligned(monkeypatch) -> None:
     _install_runtime_stubs()
     _ensure_workspace_on_path()
     from inspection_fsm.fsm_node import FSMNode
@@ -265,14 +281,52 @@ def test_fsm_publish_capture_request_keeps_legacy_and_typed_payloads_aligned() -
 
     FSMNode.publish_capture_request(node)
 
-    assert len(published) == 2
-    legacy = published[0]
-    typed = published[1]
-    payload = json.loads(legacy.data)
-    assert payload['type'] == 'capture_request'
-    assert payload['trace_id'] == 'T-5'
-    assert payload['cycle_index'] == 11
+    assert len(published) == 1
+    typed = published[0]
     assert typed.trace_id == 'T-5'
     assert '"trace_id":"T-5"' in typed.payload_json.replace(' ', '')
     assert '"cycle_index":11' in typed.payload_json.replace(' ', '')
     assert artifacts.calls
+
+    monkeypatch.setenv('INSPECTION_TRANSPORT_LEGACY_CAPTURE_REQUEST_ENABLED', '1')
+    published.clear()
+    FSMNode.publish_capture_request(node)
+    assert len(published) == 2
+    legacy = published[0]
+    payload = json.loads(legacy.data)
+    assert payload['type'] == 'capture_request'
+    assert payload['trace_id'] == 'T-5'
+    assert payload['cycle_index'] == 11
+
+
+def test_fsm_runtime_event_bridge_deduplicates_legacy_and_typed_capture_events() -> None:
+    _install_runtime_stubs()
+    _ensure_workspace_on_path()
+    from inspection_fsm.fsm_core import StationPhase
+    from inspection_fsm.fsm_ingress import FsmIngressAdapter
+
+    captured = []
+    node = types.SimpleNamespace(
+        _runtime_input_blocked=lambda _source: False,
+        emit_event=lambda *_args, **_kwargs: None,
+        apply_event=lambda event, reason: captured.append({'event': getattr(event, 'value', str(event)), 'reason': reason}),
+        runtime=types.SimpleNamespace(current=types.SimpleNamespace(artifacts=types.SimpleNamespace(set=lambda *_args, **_kwargs: None))),
+        data=types.SimpleNamespace(trace_id='TRACE-DEDUP', item_id=8, phase=StationPhase.CAPTURE_WAIT_FRAME),
+    )
+
+    adapter = FsmIngressAdapter(node)
+    payload = {
+        'type': 'vision_frame_acquired',
+        'trace_id': 'TRACE-DEDUP',
+        'batch_id': 'B-DEDUP',
+        'item_id': 8,
+        'frame_index': 1,
+        'lifecycle_state': 'ACTIVE',
+        'schema_version': 'v1',
+    }
+
+    adapter.on_event_message(types.SimpleNamespace(data=json.dumps(payload, ensure_ascii=False)))
+    adapter.on_typed_vision_event_message(types.SimpleNamespace(payload_json=json.dumps(payload, ensure_ascii=False), schema_version='v1'))
+
+    assert len(captured) == 1
+    assert captured[0]['event'] == 'CAPTURE_DONE'

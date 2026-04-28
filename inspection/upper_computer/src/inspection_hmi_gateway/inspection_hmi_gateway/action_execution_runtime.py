@@ -7,7 +7,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
-from inspection_utils.paths import relative_artifact_path
+from inspection_utils.io_common import relative_artifact_path
 
 from .action_contract import ActionPolicyError, ensure_action_submit_allowed
 from .action_handlers import ACTION_HANDLER_REGISTRY, ActionExecutionRequest

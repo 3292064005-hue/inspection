@@ -11,3 +11,5 @@ services:
     volumes:
       - .:/workspace
     command: bash scripts/validate_workspace.sh
+
+# run_benchmark is internal synthetic QA/performance tooling and is not counted as production throughput.

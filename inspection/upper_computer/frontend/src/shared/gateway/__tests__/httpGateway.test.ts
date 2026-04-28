@@ -101,7 +101,8 @@ describe('HttpGateway', () => {
       .mockResolvedValueOnce({ data: { mode: 'HOT', degraded: false, repairRequired: false, projectionAvailable: true, fallbackEnabled: false, querySurface: 'projection', maintenanceState: 'IDLE', repairRunning: false, lastError: '', lastRepairAt: '2026-04-01T12:00:00Z', lastRepairReason: '', sourceSyncToken: 's2', materializedSyncToken: 'm2' } })
       .mockResolvedValueOnce({ data: [{ id: 'recipe-1' }] })
       .mockResolvedValueOnce({ data: { id: 'recipe-1', name: '配方 1' } })
-      .mockResolvedValueOnce({ data: { activation: { recipeId: 'recipe-1' } } })
+      .mockResolvedValueOnce({ data: { jobId: 'job-switch-1', status: 'QUEUED' } })
+      .mockResolvedValueOnce({ data: { jobId: 'job-switch-1', status: 'COMPLETED', result: { activation: { recipeId: 'recipe-1' } } } })
       .mockResolvedValueOnce({ data: [{ id: 'diag-1' }] })
       .mockResolvedValueOnce({ data: { jobId: 'job-diag-1', status: 'QUEUED' } })
       .mockResolvedValueOnce({ data: { jobId: 'job-diag-1', status: 'RUNNING' } })
@@ -130,26 +131,27 @@ describe('HttpGateway', () => {
     expect(gateway.getCapabilities?.().demoScenarioControl.supported).toBe(false);
     await expect(gateway.configureDemoScenario?.('balanced' as any)).rejects.toThrow('demo_scenario_control_unsupported_in_http_gateway');
 
-    expect(requestMock).toHaveBeenNthCalledWith(1, '/api/v1/auth/session');
+    expect(requestMock).toHaveBeenNthCalledWith(1, '/api/v1/auth/session', expect.objectContaining({ method: 'GET' }));
     expect(requestMock).toHaveBeenNthCalledWith(12, '/api/v1/actions/set-maintenance-mode', expect.objectContaining({ method: 'POST' }));
-    expect(requestMock).toHaveBeenNthCalledWith(13, '/api/v1/actions/jobs/job-maint-1');
-    expect(requestMock).toHaveBeenNthCalledWith(14, '/api/v1/actions/jobs/job-maint-1');
+    expect(requestMock).toHaveBeenNthCalledWith(13, '/api/v1/actions/jobs/job-maint-1', expect.objectContaining({ method: 'GET' }));
+    expect(requestMock).toHaveBeenNthCalledWith(14, '/api/v1/actions/jobs/job-maint-1', expect.objectContaining({ method: 'GET' }));
     expect(requestMock).toHaveBeenNthCalledWith(15, '/api/v1/actions/create-batch', expect.objectContaining({ method: 'POST' }));
-    expect(requestMock).toHaveBeenNthCalledWith(16, '/api/v1/actions/jobs/job-batch-1');
-    expect(requestMock).toHaveBeenNthCalledWith(17, '/api/v1/results/result-1');
+    expect(requestMock).toHaveBeenNthCalledWith(16, '/api/v1/actions/jobs/job-batch-1', expect.objectContaining({ method: 'GET' }));
+    expect(requestMock).toHaveBeenNthCalledWith(17, '/api/v1/results/result-1', expect.objectContaining({ method: 'GET' }));
     expect(requestMock).toHaveBeenCalledWith('/api/v1/actions/start-batch', expect.objectContaining({ method: 'POST', body: JSON.stringify({ recipeId: 'recipe-1', batchId: 'BATCH-1' }) }));
     expect(requestMock).toHaveBeenCalledWith('/api/v1/actions/stop-station', expect.objectContaining({ method: 'POST' }));
     expect(requestMock).toHaveBeenCalledWith('/api/v1/actions/reset-station', expect.objectContaining({ method: 'POST' }));
     expect(requestMock).toHaveBeenCalledWith('/api/v1/actions/diagnostics/capture-frame', expect.objectContaining({ method: 'POST' }));
-    expect(requestMock).toHaveBeenCalledWith('/api/v1/actions/jobs/job-diag-1');
-    expect(requestMock).toHaveBeenLastCalledWith('/api/v1/audit?limit=10&offset=5');
+    expect(requestMock).toHaveBeenCalledWith('/api/v1/actions/jobs/job-diag-1', expect.objectContaining({ method: 'GET' }));
+    expect(requestMock).toHaveBeenLastCalledWith('/api/v1/audit?limit=10&offset=5', expect.objectContaining({ method: 'GET' }));
   });
 
   it('marks http healthy for login, result queries and batch exports', async () => {
     requestMock
       .mockResolvedValueOnce({ data: { username: 'operator', displayName: '操作员', role: 'operator' } })
       .mockResolvedValueOnce({ data: [{ id: 'r1' }] })
-      .mockResolvedValueOnce({ data: { exportUrl: '/artifacts/exports/batch.zip', jobId: 'job-1' } });
+      .mockResolvedValueOnce({ data: { jobId: 'job-export-1', status: 'QUEUED' } })
+      .mockResolvedValueOnce({ data: { jobId: 'job-export-1', status: 'COMPLETED', result: { exportUrl: '/artifacts/exports/batch.zip' } } });
 
     const gateway = new HttpGateway();
 
@@ -159,10 +161,11 @@ describe('HttpGateway', () => {
 
     expect(session?.role).toBe('operator');
     expect(results).toEqual([{ id: 'r1' }]);
-    expect(exported).toEqual({ url: '/artifacts/exports/batch.zip', jobId: 'job-1' });
+    expect(exported).toEqual({ url: '/artifacts/exports/batch.zip', jobId: 'job-export-1' });
     expect(requestMock).toHaveBeenNthCalledWith(1, '/api/v1/auth/login', expect.objectContaining({ method: 'POST' }));
-    expect(requestMock).toHaveBeenNthCalledWith(2, '/api/v1/results?batchId=BATCH-1&decision=NG');
-    expect(requestMock).toHaveBeenNthCalledWith(3, '/api/v1/exports/BATCH-1', expect.objectContaining({ method: 'POST' }));
+    expect(requestMock).toHaveBeenNthCalledWith(2, '/api/v1/results?batchId=BATCH-1&decision=NG', expect.objectContaining({ method: 'GET' }));
+    expect(requestMock).toHaveBeenNthCalledWith(3, '/api/v1/actions/export-batch', expect.objectContaining({ method: 'POST', body: JSON.stringify({ batchId: 'BATCH-1' }) }));
+    expect(requestMock).toHaveBeenNthCalledWith(4, '/api/v1/actions/jobs/job-export-1', expect.objectContaining({ method: 'GET' }));
     expect(gateway.getStatus?.().httpOk).toBe(true);
   });
 });

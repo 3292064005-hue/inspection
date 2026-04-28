@@ -1,0 +1,45 @@
+{
+  "allowMissingHardwareEvidence": true,
+  "generatedAt": "2026-04-28T04:04:42Z",
+  "hardwareEvidenceVerifiedCount": 0,
+  "matrixPath": "release/runtime_validation_matrix.yaml",
+  "matrixSha256": "80854e13e47f706439119059d46f484091d96110f64ea18e6c595131d2bbb7d6",
+  "passed": false,
+  "relaxedHardwareSkips": [
+    "upper_computer_with_stm32",
+    "upper_computer_with_esp32s3",
+    "full_hardware_closed_loop"
+  ],
+  "releaseEvidenceTopics": {
+    "core": [
+      "/inspection/decision",
+      "/inspection/image_raw",
+      "/inspection/result",
+      "/inspection/station/state"
+    ],
+    "debug": [],
+    "diagnostic": [
+      "/inspection/diagnostics",
+      "/inspection/image_annotated",
+      "/inspection/result_raw"
+    ]
+  },
+  "releaseGateEligible": false,
+  "requiredScenarioIds": [
+    "sim_closed_loop",
+    "upper_computer_with_stm32",
+    "upper_computer_with_esp32s3",
+    "full_hardware_closed_loop"
+  ],
+  "requiredScenarioVerifiedCount": 0,
+  "schemaVersion": 1,
+  "simEvidenceVerifiedCount": 0,
+  "simExecutedCount": 0,
+  "simSkips": [
+    "sim_closed_loop"
+  ],
+  "skipSimExecution": true,
+  "status": "internal_unvalidated",
+  "strictHardwareEvidence": false,
+  "verificationMode": "relaxed"
+}

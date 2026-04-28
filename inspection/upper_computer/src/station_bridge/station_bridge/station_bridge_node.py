@@ -3,11 +3,19 @@ from __future__ import annotations
 import rclpy
 from std_msgs.msg import String
 
-from inspection_interfaces.msg import FaultEvent, SortCommand, StationState
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.param_parsing import parameter_as_bool
-from inspection_utils.qos import qos_profile
-from inspection_utils.runtime_node import InspectionRuntimeNode
+try:
+    from inspection_interfaces.msg import BridgeHandshakeCompleteEvent, BridgeHeartbeatEvent, FaultEvent, SortCommand, StationState
+except ImportError:  # pragma: no cover - ROS interface generation unavailable in unit-test environments
+    BridgeHandshakeCompleteEvent = BridgeHeartbeatEvent = None
+    from inspection_interfaces.msg import FaultEvent, SortCommand, StationState
+from inspection_utils.runtime_common import ManagedNodeMixin
+from inspection_utils.config_common import parameter_as_bool
+from inspection_utils.runtime_common import qos_profile
+from inspection_utils.runtime_common import InspectionRuntimeNode
+from inspection_utils.runtime_event_contracts import BRIDGE_HANDSHAKE_COMPLETE_TOPIC_TYPED, BRIDGE_HEARTBEAT_TOPIC_TYPED
+from inspection_utils.station_common import SORT_REQUEST_TOPIC
+from inspection_utils.station_common import load_station_protocol_contract
+from inspection_utils.station_common import load_station_capability_expectation, validate_station_capability_runtime_config
 
 from .adapter_registry import adapter_manifest_catalog, build_station_adapter, canonical_protocol_version, normalize_adapter_name, resolve_protocol_version_number
 from .bridge_base import BridgeSignal
@@ -33,6 +41,7 @@ class StationBridgeNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.declare_parameter('adapter_name', '')
         self.declare_parameter('protocol_version', 'v1')
         self.declare_parameter('supported_action_codes', [])
+        self.declare_parameter('station_capability_profile', '')
         self.declare_parameter('serial_port', '/dev/ttyUSB0')
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('position_delay_sec', 0.3)
@@ -47,16 +56,27 @@ class StationBridgeNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.adapter_name = normalize_adapter_name(str(self.get_parameter('adapter_name').value), sim_mode=self.sim_mode)
         self.adapter_manifest_catalog = adapter_manifest_catalog()
         self.protocol_version_label = canonical_protocol_version(self.get_parameter('protocol_version').value or 'v1')
-        self.supported_action_codes = self._parse_supported_action_codes(self.get_parameter('supported_action_codes').value)
+        self.protocol_contract = load_station_protocol_contract()
+        configured_capability_profile = str(self.get_parameter('station_capability_profile').value or '').strip()
+        self.station_capability_profile = configured_capability_profile or ('simulation_station_default' if self.sim_mode else 'stm32_station_default')
+        self.station_capability_expectation = load_station_capability_expectation(self.station_capability_profile, start=__file__)
+        configured_action_codes = self._parse_supported_action_codes(self.get_parameter('supported_action_codes').value)
+        self.supported_action_codes = validate_station_capability_runtime_config(
+            expectation=self.station_capability_expectation,
+            adapter_name=self.adapter_name,
+            protocol_version=self.protocol_version_label,
+            supported_action_codes=configured_action_codes,
+        )
+        self.expected_station_features = set(self.station_capability_expectation.features)
         self.seq = 0
         self.batch_id = ''
         self.item_id = -1
         self.trace_id = ''
         self.capabilities = StationCapabilities(
-            protocol_version=self.protocol_version_label,
+            protocol_version=self.station_capability_expectation.protocol_version,
             firmware_version='configured-runtime',
             device_id=f'{self.adapter_name}-station',
-            features={'SORT_ACK', 'HEARTBEAT', f'ADAPTER_{self.adapter_name.upper()}', f'PROTOCOL_{self.protocol_version_label.upper()}'},
+            features=set(self.station_capability_expectation.features),
             supported_action_codes=tuple(sorted(self.supported_action_codes)),
         )
         self.command_center = CommandCenter()
@@ -68,9 +88,11 @@ class StationBridgeNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.next_reconnect_at = 0.0
         self.state_pub = self.create_publisher(StationState, '/station/state', qos_profile('station_state'))
         self.event_pub = self.create_publisher(String, '/inspection/events', qos_profile('event'))
+        self.typed_bridge_heartbeat_pub = self.create_publisher(BridgeHeartbeatEvent, BRIDGE_HEARTBEAT_TOPIC_TYPED, qos_profile('event')) if BridgeHeartbeatEvent is not None else None
+        self.typed_bridge_handshake_pub = self.create_publisher(BridgeHandshakeCompleteEvent, BRIDGE_HANDSHAKE_COMPLETE_TOPIC_TYPED, qos_profile('event')) if BridgeHandshakeCompleteEvent is not None else None
         self.fault_pub = self.create_publisher(FaultEvent, '/station/fault', qos_profile('diagnostics'))
         self.feed_sub = self.create_subscription(String, '/station/feed_request', self.on_feed_request, qos_profile('control'))
-        self.sort_sub = self.create_subscription(SortCommand, '/station/sort_cmd', self.on_sort_cmd, qos_profile('result'))
+        self.sort_sub = self.create_subscription(SortCommand, SORT_REQUEST_TOPIC, self.on_sort_request, qos_profile('result'))
         self.reset_sub = self.create_subscription(String, '/station/reset_request', self.on_reset_request, qos_profile('control'))
         hb = float(self.get_parameter('heartbeat_sec').value)
         self.create_timer(hb, self.publish_heartbeat)
@@ -83,6 +105,10 @@ class StationBridgeNode(ManagedNodeMixin, InspectionRuntimeNode):
             sort_delay_sec=self.sort_delay,
             serial_port=str(self.get_parameter('serial_port').value),
             baudrate=int(self.get_parameter('baudrate').value),
+            capability_payload=self.station_capability_expectation.to_payload(
+                firmware_version='mock-v5' if self.adapter_name == 'mock' else 'configured-runtime',
+                device_id='mock-station' if self.adapter_name == 'mock' else f'{self.adapter_name}-station',
+            ),
         )
         self.coordinator = BridgeSessionCoordinator(self)
         self.adapter.set_callback(self.on_adapter_signal)
@@ -149,8 +175,9 @@ class StationBridgeNode(ManagedNodeMixin, InspectionRuntimeNode):
     def on_feed_request(self, msg: String) -> None:
         self.coordinator.on_feed_request(msg.data)
 
-    def on_sort_cmd(self, msg: SortCommand) -> None:
-        self.coordinator.on_sort_cmd(msg)
+    def on_sort_request(self, msg: SortCommand) -> None:
+        """Submit one canonical station sort request to the adapter layer."""
+        self.coordinator.on_sort_request(msg)
 
     def on_reset_request(self, msg: String) -> None:
         self.coordinator.on_reset_request(msg.data)

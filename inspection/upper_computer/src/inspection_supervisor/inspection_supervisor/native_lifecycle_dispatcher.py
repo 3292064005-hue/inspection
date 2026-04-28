@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from inspection_utils.lifecycle_matrix import allows_lifecycle_fallback, normalize_governed_node_name, requires_native_lifecycle
+from inspection_utils.lifecycle_common import allows_lifecycle_fallback, normalize_governed_node_name, requires_native_lifecycle
 
 from .lifecycle_clients import LifecycleCommand
 

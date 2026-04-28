@@ -4,6 +4,16 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .action_contract import ActionPolicyError, action_contract
+from .action_workflows import (
+    ActionWorkflowRunner,
+    benchmark_workflow,
+    diagnostic_action_workflow,
+    maintenance_mode_workflow,
+    reset_station_workflow,
+    start_batch_workflow,
+    stop_station_workflow,
+    switch_recipe_workflow,
+)
 
 
 class UpdateFn(Protocol):
@@ -39,23 +49,7 @@ class StartBatchHandler(BaseActionHandler):
     kind = 'start_batch'
 
     def run(self, runtime: RuntimeSupport, request: ActionExecutionRequest, cancel_flag: Any, update: UpdateFn) -> dict[str, Any]:
-        """Start a production batch through the station facade.
-
-        Args:
-            runtime: Shared action runtime services.
-            request: Normalized action execution request.
-            cancel_flag: Cooperative cancellation flag.
-            update: Job-state publisher.
-
-        Returns:
-            Result payload persisted onto the action job record.
-
-        Raises:
-            RuntimeError: When the station start command is rejected.
-
-        Boundary behavior:
-            When ``batchId`` is omitted the handler allocates a new batch id.
-        """
+        """Start a production batch through the station facade."""
         app = runtime.context.app()
         recipe_id = str(request.payload.get('recipeId', '')).strip()
         batch_id = str(request.payload.get('batchId', '')).strip()
@@ -64,14 +58,16 @@ class StartBatchHandler(BaseActionHandler):
             recipe_id = str(getattr(app_state, 'active_recipe_id', '') or '').strip()
         if not batch_id and app_state is not None:
             batch_id = str(getattr(app_state, 'pending_batch_id', '') or getattr(app_state, 'batch_id', '') or '').strip()
-        runtime._step(request.job_id, cancel_flag, update, progress=15, message='准备批次上下文。')
         if not batch_id:
             batch_id = str(app.new_batch())
-        runtime._step(request.job_id, cancel_flag, update, progress=55, message='下发启动请求。')
-        ok, message = app.call_start(recipe_id=recipe_id, batch_id=batch_id)
+        result_sink: dict[str, Any] = {}
+        ActionWorkflowRunner(runtime, cancel_flag, update).run(
+            request.job_id,
+            *start_batch_workflow(app=app, batch_id=batch_id, recipe_id=recipe_id, result_sink=result_sink),
+        )
+        ok, message = result_sink.get('_start_result', (False, '启动请求未执行。'))
         if not ok:
             raise RuntimeError(message)
-        runtime._step(request.job_id, cancel_flag, update, progress=90, message='批次已启动。')
         return {'batchId': batch_id, 'recipeId': recipe_id, 'message': message, 'started': True}
 
 
@@ -82,43 +78,15 @@ class ResetStationHandler(BaseActionHandler):
         """Pause the line, clear faults, and optionally resume automation."""
         app = runtime.context.app()
         resume_after = bool(request.payload.get('resumeAfter', False))
-        runtime._step(request.job_id, cancel_flag, update, progress=20, message='下发暂停指令。')
-        app.publish_control('pause')
-        runtime._step(request.job_id, cancel_flag, update, progress=50, message='执行故障复位。', sleep_sec=0.01)
-        ok, message = app.reset_fault()
+        result_sink: dict[str, Any] = {}
+        ActionWorkflowRunner(runtime, cancel_flag, update).run(
+            request.job_id,
+            *reset_station_workflow(app=app, resume_after=resume_after, result_sink=result_sink),
+        )
+        ok, message = result_sink.get('_reset_result', (False, '故障复位未执行。'))
         if not ok:
             raise RuntimeError(message)
-        if resume_after:
-            runtime._step(request.job_id, cancel_flag, update, progress=80, message='恢复自动运行。')
-            app.publish_control('resume')
         return {'reset': True, 'resumeAfter': resume_after, 'message': message}
-
-
-class RunCalibrationHandler(BaseActionHandler):
-    kind = 'run_calibration'
-
-    def run(self, runtime: RuntimeSupport, request: ActionExecutionRequest, cancel_flag: Any, update: UpdateFn) -> dict[str, Any]:
-        """Reject calibration execution until a real calibration workflow exists.
-
-        Args:
-            runtime: Shared action runtime services.
-            request: Normalized action execution request.
-            cancel_flag: Cooperative cancellation flag.
-            update: Job-state publisher.
-
-        Returns:
-            No payload is returned because execution is blocked.
-
-        Raises:
-            ActionPolicyError: Always raised because the calibration workflow is
-                intentionally not exposed as an executable path yet.
-
-        Boundary behavior:
-            The handler mirrors the catalog policy so accidental direct runtime
-            invocation cannot silently recreate the previous stub behavior.
-        """
-        contract = action_contract(self.kind)
-        raise ActionPolicyError(contract.kind, contract.capability.blocked_reason or 'calibration_workflow_not_available', contract.capability.summary or '标定闭环尚未落地，当前不可执行。')
 
 
 class ExecuteReplayHandler(BaseActionHandler):
@@ -201,10 +169,10 @@ class RunBenchmarkHandler(BaseActionHandler):
         except (TypeError, ValueError):
             samples = 10
         capability = action_contract(self.kind).capability.to_dict()
-        app.publish_control('pause')
-        runtime._step(request.job_id, cancel_flag, update, progress=20, message='准备基准测试环境。', sleep_sec=0.01)
-        app.publish_control('resume')
-        runtime._step(request.job_id, cancel_flag, update, progress=70, message='执行基准采样。', sleep_sec=0.02)
+        ActionWorkflowRunner(runtime, cancel_flag, update).run(
+            request.job_id,
+            *benchmark_workflow(app=app),
+        )
         report_path = runtime._write_job_report(
             request.job_id,
             'benchmark',
@@ -233,18 +201,18 @@ class SwitchRecipeWithValidationHandler(BaseActionHandler):
         recipe_id = str(request.payload.get('recipeId', '')).strip()
         if not recipe_id:
             raise ValueError('recipeId is required')
-        runtime._step(request.job_id, cancel_flag, update, progress=20, message='校验目标配方。')
-        recipe = app.recipe_store.load_by_id(recipe_id)
-        if not recipe:
-            raise FileNotFoundError(f'recipe_not_found:{recipe_id}')
         dry_run = bool(request.payload.get('dryRun', False))
-        if not dry_run:
-            runtime._step(request.job_id, cancel_flag, update, progress=60, message='激活目标配方。')
-            receipt = app.activate_recipe(recipe_id, operator=str(request.actor.get('username', 'anonymous')))
-        else:
-            receipt = {'recipeId': recipe_id, 'dryRun': True}
-        runtime._step(request.job_id, cancel_flag, update, progress=90, message='写入配方切换结果。')
-        return {'recipeId': recipe_id, 'dryRun': dry_run, 'validation': {'valid': True}, 'activation': receipt}
+        result_sink: dict[str, Any] = {}
+        ActionWorkflowRunner(runtime, cancel_flag, update).run(
+            request.job_id,
+            *switch_recipe_workflow(app=app, recipe_id=recipe_id, dry_run=dry_run, actor=str(request.actor.get('username', 'anonymous')), result_sink=result_sink),
+        )
+        return {
+            'recipeId': recipe_id,
+            'dryRun': dry_run,
+            'validation': dict(result_sink.get('validation', {})),
+            'activation': dict(result_sink.get('activation', {})),
+        }
 
 
 class StopStationHandler(BaseActionHandler):
@@ -253,9 +221,10 @@ class StopStationHandler(BaseActionHandler):
     def run(self, runtime: RuntimeSupport, request: ActionExecutionRequest, cancel_flag: Any, update: UpdateFn) -> dict[str, Any]:
         """Stop the station through the canonical control plane."""
         app = runtime.context.app()
-        runtime._step(request.job_id, cancel_flag, update, progress=25, message='下发停线指令。')
-        app.publish_control('stop')
-        runtime._step(request.job_id, cancel_flag, update, progress=90, message='停线指令已提交。')
+        ActionWorkflowRunner(runtime, cancel_flag, update).run(
+            request.job_id,
+            *stop_station_workflow(app=app),
+        )
         return {'stopped': True, 'message': '已发布停止指令。'}
 
 
@@ -265,10 +234,12 @@ class SetMaintenanceModeHandler(BaseActionHandler):
     def run(self, runtime: RuntimeSupport, request: ActionExecutionRequest, cancel_flag: Any, update: UpdateFn) -> dict[str, Any]:
         """Request a maintenance-mode transition through the canonical action plane."""
         enabled = bool(request.payload.get('enabled', False))
-        runtime._step(request.job_id, cancel_flag, update, progress=30, message='提交维护模式切换请求。')
-        snapshot = runtime.context.app().request_maintenance_mode(enabled, actor=str(request.actor.get('username', 'anonymous')))
-        runtime._step(request.job_id, cancel_flag, update, progress=90, message='维护模式请求已提交。')
-        return snapshot
+        result_sink: dict[str, Any] = {}
+        ActionWorkflowRunner(runtime, cancel_flag, update).run(
+            request.job_id,
+            *maintenance_mode_workflow(app=runtime.context.app(), enabled=enabled, actor=str(request.actor.get('username', 'anonymous')), result_sink=result_sink),
+        )
+        return dict(result_sink.get('snapshot', {}))
 
 
 class CreateBatchHandler(BaseActionHandler):
@@ -306,11 +277,12 @@ class DiagnosticActionProxyHandler(BaseActionHandler):
 
     def run(self, runtime: RuntimeSupport, request: ActionExecutionRequest, cancel_flag: Any, update: UpdateFn) -> dict[str, Any]:
         app = runtime.context.app()
-        runtime._step(request.job_id, cancel_flag, update, progress=20, message='校验维护态。')
-        runtime._step(request.job_id, cancel_flag, update, progress=60, message='执行诊断动作。')
-        result = app.run_diagnostic_action(self.diagnostic_action)
-        runtime._step(request.job_id, cancel_flag, update, progress=90, message='诊断动作执行完成。')
-        return result
+        result_sink: dict[str, Any] = {}
+        ActionWorkflowRunner(runtime, cancel_flag, update).run(
+            request.job_id,
+            *diagnostic_action_workflow(app=app, diagnostic_action=self.diagnostic_action, result_sink=result_sink),
+        )
+        return dict(result_sink.get('result', {}))
 
 
 class DiagnosticCaptureFrameHandler(DiagnosticActionProxyHandler):
@@ -332,7 +304,6 @@ ACTION_HANDLER_REGISTRY: dict[str, BaseActionHandler] = {
     handler.kind: handler for handler in (
         StartBatchHandler(),
         ResetStationHandler(),
-        RunCalibrationHandler(),
         ExecuteReplayHandler(),
         ExportBatchHandler(),
         RunBenchmarkHandler(),

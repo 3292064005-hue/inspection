@@ -1,0 +1,76 @@
+{
+  "scenarioId": "full_hardware_closed_loop",
+  "tier": "P0",
+  "executedAt": "REPLACE_WITH_UTC_TIMESTAMP",
+  "operator": "REPLACE_WITH_OPERATOR",
+  "gitCommit": "REPLACE_WITH_GIT_COMMIT",
+  "trigger": "ros2 launch inspection_bringup real_station.launch.py sim_mode:=false station_config_path:=config/station/station_stm32.yaml camera_config_path:=config/camera/camera_esp32s3.yaml enable_gateway:=true action_executor_enabled:=true",
+  "environment": {
+    "host": "REPLACE_WITH_HOST",
+    "upperComputer": true,
+    "stm32": true,
+    "esp32s3": true
+  },
+  "expectedChecks": [
+    {
+      "name": "start_batch_closed_loop",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "capture_process_decision_cycle",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "sort_execution_roundtrip",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "maintenance_mode_diagnostic_actions",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "read_model_projection_ready",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "reconnect_and_fault_recovery",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    }
+  ],
+  "failureCriteria": [
+    {
+      "name": "cycle_not_completed",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    },
+    {
+      "name": "result_not_projected",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    },
+    {
+      "name": "recovery_path_failed",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    },
+    {
+      "name": "unsafe_diagnostic_execution",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    }
+  ],
+  "artifacts": {
+    "logs": [],
+    "screenshots": [],
+    "videos": [],
+    "reports": []
+  },
+  "notes": "REPLACE_WITH_EXECUTION_SUMMARY",
+  "passed": false
+}

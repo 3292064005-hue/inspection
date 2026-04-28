@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { CameraFrame, InspectionResult } from '@/shared/types/domain';
+import type { CameraFrame, InspectionResult, ObservedInspectionResult, ResultStatisticsSnapshot } from '@/shared/types/domain';
 
 export interface TimelineEntry {
   id: string;
@@ -16,11 +16,13 @@ export const useInspectionStore = defineStore('inspection', {
       capturedAt: new Date().toISOString(),
       annotated: true,
       semantic: 'LATEST_RESULT_FRAME',
-      sourceEvent: 'inspection.result.created',
+      sourceEvent: 'inspection.result.observed',
       description: '最近一次视觉处理结果对应的图像快照。',
     } as CameraFrame,
     currentResult: null as InspectionResult | null,
+    observedResult: null as ObservedInspectionResult | null,
     recentResults: [] as InspectionResult[],
+    statistics: null as ResultStatisticsSnapshot | null,
     selectedResultId: '' as string,
     frameViewMode: 'overlay' as 'overlay' | 'raw',
     timeline: [] as TimelineEntry[],
@@ -51,9 +53,27 @@ export const useInspectionStore = defineStore('inspection', {
         this.currentResult = ordered[0] ?? null;
       }
     },
+    applyStatistics(statistics: ResultStatisticsSnapshot | null) {
+      this.statistics = statistics;
+    },
+    applyObservedResult(result: ObservedInspectionResult) {
+      this.observedResult = result;
+      this.frame = {
+        ...this.frame,
+        url: result.overlayUrl ?? result.imageUrl ?? this.frame.url,
+        capturedAt: result.timestamp,
+        annotated: !!result.overlayUrl,
+        semantic: 'LATEST_RESULT_FRAME',
+        sourceEvent: 'inspection.result.observed',
+        description: '最近一次视觉处理结果对应的图像快照。',
+      };
+    },
     applyResult(result: InspectionResult) {
       this.currentResult = result;
       this.selectedResultId = result.id;
+      if (this.observedResult?.id === result.id) {
+        this.observedResult = null;
+      }
       this.replaceRecentResults([result, ...this.recentResults]);
       this.timeline.unshift({
         id: result.id,

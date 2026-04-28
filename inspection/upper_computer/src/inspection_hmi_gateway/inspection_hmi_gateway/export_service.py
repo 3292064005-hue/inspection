@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from inspection_utils.paths import resolve_log_artifact_path, resolve_runtime_path
+from inspection_utils.io_common import resolve_log_artifact_path, resolve_runtime_path
 
 from .recipe_store import RecipeStore
 from .result_store import ResultStore

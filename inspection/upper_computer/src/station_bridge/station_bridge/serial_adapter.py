@@ -8,7 +8,7 @@ try:
 except Exception:  # pragma: no cover
     serial = None
 
-from inspection_utils.protocol import (
+from inspection_utils.station_common import (
     CMD_FEED_ONE,
     CMD_HEARTBEAT,
     CMD_QUERY_CAPABILITIES,

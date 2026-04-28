@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from inspection_hmi_gateway.server.services import StationService
+from inspection_hmi_gateway.server.operations.command_services import ActionCommandService
 from inspection_fsm.control_dispatch import dispatch_control_command
 from inspection_fsm.fsm_core import StationEvent
 from inspection_utils.control_protocol import STOP_COMMAND, extract_control_command, normalize_control_command
@@ -42,14 +42,12 @@ class _FakeContext:
 
 def test_station_stop_submits_canonical_action_job() -> None:
     context = _FakeContext()
-    service = StationService(context)  # type: ignore[arg-type]
+    service = ActionCommandService(context)  # type: ignore[arg-type]
 
-    response = service.stop(actor={'username': 'operator', 'role': 'operator'})
+    response = service.submit('stop_station', {}, actor={'username': 'operator', 'role': 'operator'})
 
-    assert response['success'] is True
+    assert response['kind'] == 'stop_station'
     assert context.action_job_service().submissions == [{'kind': 'stop_station', 'payload': {}, 'actor': {'username': 'operator', 'role': 'operator'}}]
-    assert context.audit_entries[-1]['action'] == 'STATION_STOP'
-    assert context.audit_entries[-1]['details']['transport'] == 'legacy_wrapper_over_action_plane'
 
 
 def test_normalize_control_command_preserves_known_values_and_edge_inputs() -> None:

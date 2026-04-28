@@ -3,8 +3,21 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND_DIR="$ROOT_DIR/frontend"
+FRONTEND_DIST_DIR="$FRONTEND_DIR/dist"
 LOG_DIR="$ROOT_DIR/.artifacts/verification/logs"
 STATUS_TSV="$LOG_DIR/status.tsv"
+FRONTEND_DIST_PREEXISTED=0
+if [[ -d "$FRONTEND_DIST_DIR" ]]; then
+  FRONTEND_DIST_PREEXISTED=1
+fi
+
+cleanup_generated_frontend_dist() {
+  if [[ "$FRONTEND_DIST_PREEXISTED" -eq 0 ]]; then
+    rm -rf "$FRONTEND_DIST_DIR"
+  fi
+}
+
+trap cleanup_generated_frontend_dist EXIT
 
 mkdir -p "$LOG_DIR"
 : > "$STATUS_TSV"
@@ -29,6 +42,9 @@ run_step() {
 
 cd "$ROOT_DIR"
 run_step "Backend syntax check" 1 python3 scripts/check_python_syntax.py
+run_step "Action registry drift check" 1 python3 scripts/sync_action_registry.py --check
+run_step "Action registry completeness" 1 python3 scripts/validate_action_registry_completeness.py
+run_step "Gateway contract drift check" 1 python3 scripts/check_gateway_contract_drift.py
 run_step "Backend required tests" 1 bash scripts/run_backend_required_tests.sh
 run_step "Backend runtime smoke tests" 1 bash scripts/run_backend_runtime_smoke_tests.sh
 if [[ "${ENABLE_BACKEND_RELEASE_GATE:-0}" = "1" ]]; then

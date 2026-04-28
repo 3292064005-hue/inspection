@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from inspection_utils.lifecycle_matrix import lifecycle_governance_matrix
-from inspection_utils.qos import qos_compatibility_warnings, qos_policy_matrix
+from inspection_utils.lifecycle_common import lifecycle_governance_matrix
+from inspection_utils.runtime_common import qos_compatibility_warnings, qos_policy_matrix
 
 from .diagnostic_rules import finalize_snapshot
 from .health_model import DiagnosticsSnapshot
@@ -108,6 +108,7 @@ class DiagnosticsAggregator:
 
         writer_level = self._artifact_backpressure_level()
         snapshot.set_channel('artifact_backpressure', writer_level, 'artifact writer backpressure state', **dict(self.last_artifact_writer))
+        snapshot.set_channel('artifact_quality', self._artifact_quality_level(), 'artifact retention quality policy', **self._artifact_quality_values())
 
         bridge_phase = str(self.last_bridge_session.get('phase', self.last_station_detail.get('session_phase', 'UNKNOWN')))
         heartbeat_ok = bool(self.last_station_detail.get('heartbeat_ok', True))
@@ -169,6 +170,26 @@ class DiagnosticsAggregator:
         if dropped > 0 or queue_usage >= 0.8:
             return 'WARN'
         return 'OK'
+
+    def _artifact_quality_level(self) -> str:
+        failed = int(self.last_artifact_writer.get('failed', 0) or 0)
+        dropped = int(self.last_artifact_writer.get('droppedOverload', 0) or 0)
+        if failed > 0:
+            return 'ERROR'
+        if dropped > 0:
+            return 'WARN'
+        return 'OK'
+
+    def _artifact_quality_values(self) -> dict[str, Any]:
+        queue_usage = float(self.last_artifact_writer.get('queueUsage', 0.0) or 0.0)
+        dropped = int(self.last_artifact_writer.get('droppedOverload', 0) or 0)
+        return {
+            'rawRetentionPolicy': 'required',
+            'annotatedRetentionPolicy': 'best_effort',
+            'queueUsage': queue_usage,
+            'droppedOverload': dropped,
+            'degraded': bool(dropped > 0 or queue_usage >= 0.8),
+        }
 
     def _camera_level(self) -> str:
         status = str(self.last_camera_status.get('status', '')).strip().lower()

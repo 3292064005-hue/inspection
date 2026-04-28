@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from inspection_utils.logging_tools import safe_json_loads
+from inspection_utils.logging_common import safe_json_loads
 
 
 def fetch_trace_ids(conn: sqlite3.Connection) -> list[str]:

@@ -4,7 +4,7 @@ from typing import Any
 
 from ..telemetry_service import TelemetryService
 from .context import GatewayAppContext
-from .service_common import app_facade
+from .service_common import query_plane, recipe_plane, state_store
 from .operations.query_services import ActionQueryService, DiagnosticsQueryService
 from .results.query_services import ResultQueryService
 
@@ -14,10 +14,10 @@ class StationQueryService:
         self.context = context
 
     def get_snapshot(self) -> dict[str, Any]:
-        return app_facade(self.context).snapshot_payload()
+        return state_store(self.context).snapshot_payload()
 
     def get_stats(self) -> dict[str, Any]:
-        return app_facade(self.context).stats_payload()
+        return state_store(self.context).stats_payload()
 
 
 class RecipeQueryService:
@@ -25,10 +25,10 @@ class RecipeQueryService:
         self.context = context
 
     def list(self) -> list[dict[str, Any]]:
-        return app_facade(self.context).refresh_recipes()
+        return recipe_plane(self.context).service.refresh_recipes()
 
     def history(self, recipe_id: str) -> dict[str, Any]:
-        return app_facade(self.context).recipe_history(recipe_id)
+        return recipe_plane(self.context).service.recipe_history(recipe_id)
 
 
 class ExportQueryService:

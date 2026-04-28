@@ -7,24 +7,49 @@ import json
 from std_msgs.msg import String
 
 try:
-    from inspection_interfaces.msg import ActionExecutorEvent, CaptureRequest, ControlCommand, DiagnosticsSnapshot, SupervisorStateEnvelope
+    from inspection_interfaces.msg import (
+        ActionExecutorEvent,
+        BridgeHandshakeCompleteEvent,
+        BridgeHeartbeatEvent,
+        CaptureRequest,
+        ControlCommand,
+        DecisionPublishedEvent,
+        DiagnosticsSnapshot,
+        FaultRaisedEvent,
+        FsmTransitionEvent,
+        SupervisorCommand,
+        SupervisorStateEnvelope,
+        VisionFrameAcquiredEvent,
+    )
 except ImportError:  # pragma: no cover - ROS interface generation unavailable in unit-test environments
-    ActionExecutorEvent = CaptureRequest = ControlCommand = DiagnosticsSnapshot = SupervisorStateEnvelope = None
+    ActionExecutorEvent = BridgeHandshakeCompleteEvent = BridgeHeartbeatEvent = CaptureRequest = ControlCommand = DecisionPublishedEvent = DiagnosticsSnapshot = FaultRaisedEvent = FsmTransitionEvent = SupervisorCommand = SupervisorStateEnvelope = VisionFrameAcquiredEvent = None
 
 from inspection_interfaces.msg import CountStats, FaultEvent, InspectionResult, StationState
 from inspection_interfaces.srv import ResetFault, StartInspection
-from inspection_utils.control_protocol import normalize_control_command
-from inspection_utils.logging_tools import safe_json_loads
-from inspection_utils.transport_adapters import legacy_payload_json_from_typed_message, publish_dual_capture_request, publish_dual_control
-from inspection_utils.typed_interfaces import assert_typed_interfaces_available
-from inspection_utils.transport_contracts import (
+from inspection_utils.transport_common import normalize_control_command
+from inspection_utils.logging_common import safe_json_loads
+from inspection_utils.transport_common import legacy_payload_json_from_typed_message, publish_dual_capture_request, publish_dual_control, publish_dual_supervisor_command
+from inspection_utils.runtime_event_contracts import (
+    BRIDGE_HANDSHAKE_COMPLETE_TOPIC_TYPED,
+    BRIDGE_HEARTBEAT_TOPIC_TYPED,
+    DECISION_PUBLISHED_TOPIC_TYPED,
+    FAULT_RAISED_TOPIC_TYPED,
+    FSM_TRANSITION_TOPIC_TYPED,
+    RuntimeEventDeduper,
+    VISION_FRAME_ACQUIRED_TOPIC_TYPED,
+    is_runtime_event_payload,
+    normalize_runtime_event_message,
+)
+from inspection_utils.runtime_common import assert_typed_interfaces_available
+from inspection_utils.transport_common import (
     ACTION_EXECUTOR_EVENT_TOPIC_TYPED,
     CAPTURE_REQUEST_TOPIC_TYPED,
     CONTROL_TOPIC_TYPED,
     DIAGNOSTICS_TOPIC_TYPED,
+    SUPERVISOR_COMMAND_TOPIC_TYPED,
     SUPERVISOR_STATE_TOPIC_TYPED,
 )
-from inspection_utils.qos import qos_profile
+from inspection_utils.runtime_common import qos_profile
 
 from .action_contract import EXECUTOR_CANCEL_TOPIC, EXECUTOR_EVENT_TOPIC, EXECUTOR_SUBMIT_TOPIC
 from .native_action_client import NativeActionClientAdapter
@@ -100,7 +125,8 @@ class GatewayRosBridge:
         self.handlers = handlers
         self.service_invoker = service_invoker or RosServiceInvoker()
         self.metrics = GatewayRosBridgeMetrics()
-        assert_typed_interfaces_available(consumer='inspection_hmi_gateway_bridge', symbols={'ActionExecutorEvent': ActionExecutorEvent, 'CaptureRequest': CaptureRequest, 'ControlCommand': ControlCommand, 'DiagnosticsSnapshot': DiagnosticsSnapshot})
+        self.runtime_event_deduper = RuntimeEventDeduper(max_entries=512, ttl_sec=2.0)
+        assert_typed_interfaces_available(consumer='inspection_hmi_gateway_bridge', symbols={'ActionExecutorEvent': ActionExecutorEvent, 'BridgeHandshakeCompleteEvent': BridgeHandshakeCompleteEvent, 'BridgeHeartbeatEvent': BridgeHeartbeatEvent, 'CaptureRequest': CaptureRequest, 'ControlCommand': ControlCommand, 'DecisionPublishedEvent': DecisionPublishedEvent, 'DiagnosticsSnapshot': DiagnosticsSnapshot, 'FaultRaisedEvent': FaultRaisedEvent, 'FsmTransitionEvent': FsmTransitionEvent, 'SupervisorCommand': SupervisorCommand, 'VisionFrameAcquiredEvent': VisionFrameAcquiredEvent})
         self._action_executor_update_handlers: list[Callable[[dict[str, Any]], None]] = []
 
         self.control_pub = node.create_publisher(String, '/inspection/control', qos_profile('control'))
@@ -108,6 +134,7 @@ class GatewayRosBridge:
         self.capture_pub = node.create_publisher(String, '/inspection/capture_request', qos_profile('event'))
         self.typed_capture_pub = node.create_publisher(CaptureRequest, CAPTURE_REQUEST_TOPIC_TYPED, qos_profile('event')) if CaptureRequest is not None else None
         self.supervisor_command_pub = node.create_publisher(String, '/inspection/supervisor/command', qos_profile('control'))
+        self.typed_supervisor_command_pub = node.create_publisher(SupervisorCommand, SUPERVISOR_COMMAND_TOPIC_TYPED, qos_profile('control')) if SupervisorCommand is not None else None
         self.action_executor_submit_pub = node.create_publisher(String, EXECUTOR_SUBMIT_TOPIC, qos_profile('event'))
         self.action_executor_cancel_pub = node.create_publisher(String, EXECUTOR_CANCEL_TOPIC, qos_profile('control'))
         self.start_client = node.create_client(StartInspection, '/inspection/start')
@@ -123,6 +150,18 @@ class GatewayRosBridge:
         node.create_subscription(InspectionResult, '/inspection/result', handlers.on_result, qos_profile('result'))
         node.create_subscription(FaultEvent, '/station/fault', handlers.on_fault, qos_profile('event'))
         node.create_subscription(String, '/inspection/events', self._on_event_message, qos_profile('event'))
+        if FsmTransitionEvent is not None:
+            node.create_subscription(FsmTransitionEvent, FSM_TRANSITION_TOPIC_TYPED, self._on_typed_runtime_event_message, qos_profile('event'))
+        if VisionFrameAcquiredEvent is not None:
+            node.create_subscription(VisionFrameAcquiredEvent, VISION_FRAME_ACQUIRED_TOPIC_TYPED, self._on_typed_runtime_event_message, qos_profile('event'))
+        if DecisionPublishedEvent is not None:
+            node.create_subscription(DecisionPublishedEvent, DECISION_PUBLISHED_TOPIC_TYPED, self._on_typed_runtime_event_message, qos_profile('event'))
+        if BridgeHeartbeatEvent is not None:
+            node.create_subscription(BridgeHeartbeatEvent, BRIDGE_HEARTBEAT_TOPIC_TYPED, self._on_typed_runtime_event_message, qos_profile('event'))
+        if BridgeHandshakeCompleteEvent is not None:
+            node.create_subscription(BridgeHandshakeCompleteEvent, BRIDGE_HANDSHAKE_COMPLETE_TOPIC_TYPED, self._on_typed_runtime_event_message, qos_profile('event'))
+        if FaultRaisedEvent is not None:
+            node.create_subscription(FaultRaisedEvent, FAULT_RAISED_TOPIC_TYPED, self._on_typed_runtime_event_message, qos_profile('event'))
         node.create_subscription(String, '/inspection/diagnostics', self._on_diagnostics_message, qos_profile('diagnostics'))
         node.create_subscription(String, '/inspection/supervisor/state', self._on_supervisor_state_message, qos_profile('event'))
         node.create_subscription(String, '/inspection/orchestrator/advice', self._on_orchestrator_advice_message, qos_profile('event'))
@@ -138,6 +177,12 @@ class GatewayRosBridge:
             '/inspection/result',
             '/station/fault',
             '/inspection/events',
+            FSM_TRANSITION_TOPIC_TYPED,
+            VISION_FRAME_ACQUIRED_TOPIC_TYPED,
+            DECISION_PUBLISHED_TOPIC_TYPED,
+            BRIDGE_HEARTBEAT_TOPIC_TYPED,
+            BRIDGE_HANDSHAKE_COMPLETE_TOPIC_TYPED,
+            FAULT_RAISED_TOPIC_TYPED,
             '/inspection/diagnostics',
             '/inspection/supervisor/state',
             '/inspection/orchestrator/advice',
@@ -202,7 +247,7 @@ class GatewayRosBridge:
         return True
 
     def publish_supervisor_command(self, command: str, *, mode: str = '', reason: str = '') -> bool:
-        """Publish a supervisor-command envelope used for mode transitions.
+        """Publish one canonical supervisor command to the typed/legacy control plane.
 
         Args:
             command: Supervisor command name, for example ``set_mode``.
@@ -210,19 +255,31 @@ class GatewayRosBridge:
             reason: Optional audit-friendly reason string.
 
         Returns:
-            ``True`` when the command envelope was published.
+            ``True`` when the command envelope was published, ``False`` for an
+            empty command name.
+
+        Raises:
+            No exception is intentionally raised here. Transport failures are
+            delegated to the underlying ROS publishers.
 
         Boundary behavior:
-            The transport is currently legacy-JSON only because the supervisor
-            command plane has no typed message contract yet.
+            The legacy JSON topic remains published during migration, but the
+            typed ``SupervisorCommand`` topic is now the canonical control-plane
+            contract for new consumers.
         """
         normalized_command = str(command or '').strip().lower()
         if not normalized_command:
             return False
-        payload = {'command': normalized_command, 'mode': str(mode or '').upper(), 'reason': str(reason or ''), 'source': 'inspection_hmi_gateway'}
-        msg = String()
-        msg.data = json.dumps(payload, ensure_ascii=False)
-        self.supervisor_command_pub.publish(msg)
+        publish_dual_supervisor_command(
+            legacy_publisher=self.supervisor_command_pub,
+            typed_publisher=self.typed_supervisor_command_pub,
+            typed_message_cls=SupervisorCommand,
+            command=normalized_command,
+            target_mode=str(mode or '').upper(),
+            reason=str(reason or ''),
+            source='inspection_hmi_gateway',
+            event_type='supervisor_command',
+        )
         self.metrics.published_supervisor_commands += 1
         return True
 
@@ -307,8 +364,23 @@ class GatewayRosBridge:
         if result.message == timeout_message:
             self.metrics.service_timeouts += 1
 
+    def _forward_runtime_event_payload(self, payload: dict[str, Any]) -> None:
+        if is_runtime_event_payload(payload) and self.runtime_event_deduper.seen_recently(payload):
+            return
+        self.handlers.on_event(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
     def _on_event_message(self, msg: String) -> None:
+        payload = safe_json_loads(msg.data or '{}', {})
+        if isinstance(payload, dict):
+            self._forward_runtime_event_payload(payload)
+            return
         self.handlers.on_event(msg.data)
+
+    def _on_typed_runtime_event_message(self, msg: object) -> None:
+        fallback_payload = safe_json_loads(getattr(msg, 'payload_json', '') or '{}', {})
+        default_event_type = str(fallback_payload.get('type', '') or getattr(msg, 'event_type', '') or '').strip() or 'runtime_event'
+        payload = normalize_runtime_event_message(msg, default_event_type=default_event_type)
+        self._forward_runtime_event_payload(payload)
 
     def _on_diagnostics_message(self, msg: String) -> None:
         self.handlers.on_diagnostics(msg.data)
@@ -320,10 +392,10 @@ class GatewayRosBridge:
         self.handlers.on_orchestrator_advice(msg.data)
 
     def _on_typed_diagnostics_message(self, msg: Any) -> None:
-        self.handlers.on_diagnostics(legacy_payload_json_from_typed_message(msg, default_event_type='diagnostics_snapshot'))
+        self.handlers.on_diagnostics(legacy_payload_json_from_typed_message(msg, default_event_type='diagnostics_snapshot', bridge_name='diagnostics'))
 
     def _on_typed_supervisor_state_message(self, msg: Any) -> None:
-        self.handlers.on_supervisor_state(legacy_payload_json_from_typed_message(msg, default_event_type='supervisor_state'))
+        self.handlers.on_supervisor_state(legacy_payload_json_from_typed_message(msg, default_event_type='supervisor_state', bridge_name='supervisor_state'))
 
     def _on_action_executor_event(self, msg: String) -> None:
         payload = safe_json_loads(msg.data or '{}')
@@ -338,7 +410,7 @@ class GatewayRosBridge:
                 continue
 
     def _on_typed_action_executor_event(self, msg: Any) -> None:
-        payload = safe_json_loads(legacy_payload_json_from_typed_message(msg, default_event_type='action_executor_event'), {})
+        payload = safe_json_loads(legacy_payload_json_from_typed_message(msg, default_event_type='action_executor_event', bridge_name='action_executor_event'), {})
         if not isinstance(payload, dict):
             payload = {
                 'jobId': str(getattr(msg, 'job_id', '')),

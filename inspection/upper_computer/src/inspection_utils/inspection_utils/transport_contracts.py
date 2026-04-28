@@ -17,6 +17,7 @@ CONTROL_TOPIC_TYPED = '/inspection/control_typed'
 CAPTURE_REQUEST_TOPIC_TYPED = '/inspection/capture_request_typed'
 DIAGNOSTICS_TOPIC_TYPED = '/inspection/diagnostics_typed'
 SUPERVISOR_STATE_TOPIC_TYPED = '/inspection/supervisor/state_typed'
+SUPERVISOR_COMMAND_TOPIC_TYPED = '/inspection/supervisor/command_typed'
 ACTION_EXECUTOR_EVENT_TOPIC_TYPED = '/inspection/action_executor/events_typed'
 
 
@@ -97,6 +98,26 @@ class SupervisorStateEnvelope:
         normalized.setdefault('node', self.node)
         normalized.setdefault('profile_name', self.profile_name)
         normalized.setdefault('current_mode', self.current_mode)
+        normalized.setdefault('schema_version', self.schema_version)
+        return normalized
+
+
+@dataclass(frozen=True, slots=True)
+class SupervisorCommandEnvelope:
+    command: str
+    target_mode: str = ''
+    reason: str = ''
+    source: str = ''
+    payload: Mapping[str, Any] | None = None
+    schema_version: str = 'v1'
+
+    def to_payload(self) -> dict[str, Any]:
+        normalized = dict(self.payload or {})
+        normalized.setdefault('command', self.command)
+        normalized.setdefault('mode', self.target_mode)
+        normalized.setdefault('target_mode', self.target_mode)
+        normalized.setdefault('reason', self.reason)
+        normalized.setdefault('source', self.source)
         normalized.setdefault('schema_version', self.schema_version)
         return normalized
 
@@ -244,6 +265,83 @@ def capture_request_payload_from_message(message: Any, *, default_event_type: st
         source=str(payload.get('source', getattr(message, 'source', '')) or ''),
         schema_version=str(payload.get('schema_version', getattr(message, 'schema_version', 'v1')) or 'v1'),
         extra={k: v for k, v in payload.items() if k not in {'trace_id', 'batch_id', 'item_id', 'frame_index', 'source', 'schema_version', 'type'}},
+    )
+    normalized['type'] = str(payload.get('type', default_event_type) or default_event_type)
+    return normalized
+
+
+def supervisor_command_payload(command: str, *, target_mode: str = '', reason: str = '', source: str = '', schema_version: str = 'v1', extra: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Build a canonical supervisor-command payload for both legacy and typed transports."""
+    envelope = SupervisorCommandEnvelope(
+        command=str(command or '').strip().lower(),
+        target_mode=str(target_mode or '').strip().upper(),
+        reason=str(reason or ''),
+        source=str(source or ''),
+        payload=extra,
+        schema_version=str(schema_version or 'v1'),
+    )
+    if not envelope.command:
+        raise TransportContractError('supervisor command missing command')
+    payload = envelope.to_payload()
+    payload['command'] = envelope.command
+    payload['mode'] = envelope.target_mode
+    payload['target_mode'] = envelope.target_mode
+    payload['reason'] = envelope.reason
+    payload['source'] = envelope.source
+    payload['schema_version'] = envelope.schema_version
+    return payload
+
+
+def supervisor_command_payload_json(command: str, *, event_type: str = 'supervisor_command', target_mode: str = '', reason: str = '', source: str = '', schema_version: str = 'v1', extra: Mapping[str, Any] | None = None) -> str:
+    """Serialize a canonical supervisor command into the legacy JSON event shape."""
+    return serialize_payload(
+        event_type,
+        supervisor_command_payload(
+            command,
+            target_mode=target_mode,
+            reason=reason,
+            source=source,
+            schema_version=schema_version,
+            extra=extra,
+        ),
+    )
+
+
+def populate_supervisor_command_message(message: Any, command: str, *, target_mode: str = '', reason: str = '', source: str = '', schema_version: str = 'v1', event_type: str = 'supervisor_command', extra: Mapping[str, Any] | None = None) -> str:
+    """Populate a typed supervisor command message while keeping payload_json aligned."""
+    payload = supervisor_command_payload(
+        command,
+        target_mode=target_mode,
+        reason=reason,
+        source=source,
+        schema_version=schema_version,
+        extra=extra,
+    )
+    payload_json = serialize_payload(event_type, payload)
+    setattr(message, 'command', str(payload['command']))
+    setattr(message, 'target_mode', str(payload['target_mode']))
+    setattr(message, 'reason', str(payload['reason']))
+    setattr(message, 'source', str(payload['source']))
+    setattr(message, 'schema_version', str(payload['schema_version']))
+    if hasattr(message, 'payload_json'):
+        setattr(message, 'payload_json', payload_json)
+    return payload_json
+
+
+def supervisor_command_payload_from_message(message: Any, *, default_event_type: str = 'typed_supervisor_command') -> dict[str, Any]:
+    """Recover a canonical supervisor-command payload from a typed ROS message."""
+    raw_payload_json = getattr(message, 'payload_json', '') or ''
+    payload = safe_json_dict(raw_payload_json, fallback={}) if raw_payload_json else {}
+    command = str(payload.get('command', getattr(message, 'command', ''))).strip().lower()
+    if not command:
+        raise TransportContractError('typed supervisor command missing command')
+    normalized = supervisor_command_payload(
+        command,
+        target_mode=str(payload.get('target_mode', payload.get('mode', getattr(message, 'target_mode', ''))) or ''),
+        reason=str(payload.get('reason', getattr(message, 'reason', '')) or ''),
+        source=str(payload.get('source', getattr(message, 'source', '')) or ''),
+        schema_version=str(payload.get('schema_version', getattr(message, 'schema_version', 'v1')) or 'v1'),
+        extra={k: v for k, v in payload.items() if k not in {'command', 'mode', 'target_mode', 'reason', 'source', 'schema_version', 'type'}},
     )
     normalized['type'] = str(payload.get('type', default_event_type) or default_event_type)
     return normalized

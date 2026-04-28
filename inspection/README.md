@@ -1,34 +1,29 @@
-# Inspection Workspace Split Delivery
+# Inspection Workspace
 
-本交付件把原桌面质检项目拆成三部分：
+桌面视觉质检与自动分拣工作站的拆分交付仓库。仓库按三条主线组织：
 
-- `upper_computer/`：原 ROS2 + 网关 + 前端上位机工程
-- `firmware/stm32_station_platformio/`：STM32 工位控制固件（PlatformIO）
-- `firmware/esp32s3_camera_platformio/`：ESP32-S3 无线相机固件（PlatformIO）
+- `upper_computer/`：ROS2 上位机、HMI Gateway、前端、日志、结果、配方与诊断。
+- `firmware/stm32_station_platformio/`：STM32 工位执行固件，负责送料、到位、分拣、复位、心跳与能力查询。
+- `firmware/esp32s3_camera_platformio/`：ESP32-S3 无线相机固件，提供 JPEG snapshot 与 health endpoint。
 
-## 目录职责
+## 快速阅读顺序
 
-### 1. 上位机
-负责：
-- Supervisor / Orchestrator / FSM 控制平面
-- 视觉采集、处理、决策、日志、结果归档
-- HMI 网关与前端
-- 与 STM32 串口协议对接
-- 与 ESP32-S3 HTTP snapshot/health 接口对接
+1. `README.md`：仓库级总览、目录职责、运行入口与交付边界。
+2. `docs/SPLIT_DEPLOYMENT.md`：拆分部署、发布验证、运行闭环矩阵与回滚边界。
+3. `upper_computer/README.md`：上位机运行方式、验证入口、Gateway 契约与关键开关。
+4. `upper_computer/docs/ARCHITECTURE.md`：主链闭环、typed transport 边界、资产权威源与治理策略。
+5. 协议与固件说明：`docs/STM32_SERIAL_PROTOCOL.md`、`docs/ESP32S3_CAMERA_API.md`、两个固件目录下的 `README.md`。
 
-### 2. STM32 固件
-负责：
-- 接收上位机的 `feed / sort / reset / heartbeat / capability query`
-- 返回 `ACK / POSITION_READY / SORT_DONE / HEARTBEAT / CAPABILITIES / FAULT`
-- 驱动送料 / 分拣执行器与到位 / 故障输入
+## 文档路径规范
 
-### 3. ESP32-S3 固件
-负责：
-- 提供 Wi-Fi 摄像头采集能力
-- 对上位机暴露 JPEG snapshot 与 health endpoint
-- 作为 `vision_acquisition` 的无线图像源
+- 正式说明文档、配置中的 `documentationRefs` / `migration_guide`，以及文档相关测试断言，统一使用**仓库根相对路径**。
+- 示例：`upper_computer/docs/ARCHITECTURE.md`、`docs/SPLIT_DEPLOYMENT.md`、`firmware/stm32_station_platformio/README.md`。
+- 不再在正式说明中混用工作区相对路径，例如 `docs/ARCHITECTURE.md`、`config/system/...`、`frontend/...`、`src/...`。
+- 命令中的 `cd upper_computer`、`python scripts/...` 属于执行上下文，不算文档路径引用。
 
-## 推荐运行命令
+## 推荐运行
+
+当前默认交付物是**源码交付包**，不是预编译可运行包；`upper_computer/frontend/dist` 默认不随源码包分发。
 
 ```bash
 cd upper_computer
@@ -38,40 +33,44 @@ source install/setup.bash
 ros2 launch inspection_bringup real_station.launch.py profile_name:=production
 ```
 
-## 发布治理与打包
-- 顶层 split delivery 发布清单：`release/split_release_manifest.yaml`
-- 顶层 CI：`.github/workflows/split_delivery_ci.yml`
-- 纯源码打包脚本：`scripts/build_source_package.sh`
-- 交付打包脚本：`scripts/build_release_bundle.sh`
-- 分拆环境预检：`python3 scripts/validate_split_environment.py --workspace-root . --mode ci --require-node`
-- 目标环境一键 release 验证：`bash scripts/run_release_validation.sh`
+模拟栈入口：
 
-## 动作能力门禁
-- `upper_computer` 当前对动作能力实行分级治理：
-  - `run_calibration`：目录保留，但执行被显式阻断。
-  - `run_benchmark`：synthetic / experimental，默认不可执行。
-- 若确需启用 synthetic benchmark，必须显式设置：
-  - `INSPECTION_EXPERIMENTAL_ACTIONS_ENABLED=1`
-- 未设置该变量时，网关 API 会返回 `409 benchmark_requires_experimental_actions`，避免把实验动作误判为正式工艺能力。
+```bash
+cd upper_computer
+ros2 launch inspection_bringup sim_stack.launch.py profile_name:=simulation
+```
 
+Simulation runtimes must use `station_capability_profile: simulation_station_default` so mock adapter expectations stay aligned with fail-closed station capability validation.
 
-## 维护模式 / 动作契约 / 工位桥运行时说明
-- 维护模式不再由前端本地布尔值解锁危险动作；前端现在必须通过网关 `POST /api/v1/station/maintenance` 请求 supervisor 切换模式，并等待系统快照中的 `maintenance.enabled=true` 才允许执行诊断危险动作。诊断执行面同时切到标准 `/api/v1/actions/diagnostics/*` action job 提交链。
-- `start_batch` 动作契约中的 `recipeId` / `batchId` 现在会真实进入运行链；不再存在“接口要求传 recipeId，但启动时忽略 payload”的漂移。
-- `station_stm32.yaml` 中的 `adapter_name / protocol_version / supported_action_codes` 现在会进入 `station_bridge` 运行时：
-  - `adapter_name` 决定具体 adapter factory 实例；
-  - `protocol_version` 决定 bridge session 的协议版本；
-  - `supported_action_codes` 会用于排序动作合法性校验，非法 action code 会直接触发 bridge fault，而不是静默下发。
+## 发布与验证入口
 
-## 观测 Topic 归宿
-- `/inspection/camera/status` → diagnostics 聚合 + rosbag。
-- `/inspection/result_raw` → diagnostics 聚合 + rosbag。
-- `/inspection/image_annotated` → replay/rosbag；默认不启用 diagnostics 图像订阅，需显式开启 `enable_annotated_image_diagnostics:=true`。
+- 拆分交付 manifest：`release/split_release_manifest.yaml`
+- 运行闭环矩阵：`release/runtime_validation_matrix.yaml`
+- 环境预检：`python scripts/validate_split_environment.py --workspace-root . --mode ci --require-node`
+- 目标环境 release 验证：`bash scripts/run_release_validation.sh`
+- 源码打包：`bash scripts/build_source_package.sh`
+- 正式交付打包：`bash scripts/build_release_bundle.sh`
+- runtime matrix relaxed gate：`python scripts/run_runtime_validation_matrix.py --workspace-root . --skip-sim-execution --allow-missing-hardware-evidence`
+- runtime matrix strict gate：`python scripts/run_runtime_validation_matrix.py --workspace-root . --strict-hardware-evidence`
 
-## 说明
-- 当前上位机默认仍保留 mock / sim 路径，不会破坏原有联调方式。
-- 当前 PlatformIO 工程已按原项目真实接口与调用链拆分，但本沙箱内没有 PlatformIO/ROS2 Humble 目标环境，因此**不能把 MCU 编译与 ROS 实机联调伪装成已实测通过**。
-- ESP32-S3 固件默认要求通过 `X-Inspection-Token`（可配置）访问 HTTP API；若要兼容匿名访问，必须显式开启 `INSPECTION_ALLOW_ANONYMOUS_HTTP=1`。
+`formal_runnable_release` 必须由 strict gate 触发，并完成前端 `npm ci / test / typecheck / lint / build:real` 与 `upper_computer/frontend/dist/index.html` 检查。
 
-- `sim_stack.launch.py` 是规范的模拟整栈入口；`real_station.launch.py` 现在默认绑定真实工位配置，并在 real mode 解析到 `camera.yaml` / `station.yaml` 时直接失败。
-- 结果/回放查询现在默认采用 projection-only / fail-closed；当 read model 过期时，HMI 需要先调用 `POST /api/v1/results/read-model/repair` 或执行离线 repair，再重试详情查询。
+## Gateway 契约与生成资产
+
+- 单一真值源：`upper_computer/config/system/action_registry.yaml`
+- 派生资产：`upper_computer/config/system/action_capability_matrix.yaml`、`upper_computer/config/system/action_governance.yaml`、`upper_computer/config/system/compatibility_routes.yaml`、`upper_computer/config/system/station_capability_expectations.yaml`
+- Gateway 派生资产：`upper_computer/frontend/openapi/inspection_gateway_openapi.json`、`upper_computer/frontend/src/shared/gateway/generated/actionApi.ts`
+- 同步命令：`cd upper_computer && python scripts/sync_action_registry.py && python scripts/sync_gateway_contracts.py`
+- drift 检查：`cd upper_computer && python scripts/sync_action_registry.py --check && python scripts/check_gateway_contract_drift.py`
+
+## 运行边界
+
+- `run_benchmark` 是内部 synthetic QA / 性能回归动作，不计入生产业务指标。
+- `enable_annotated_image_diagnostics:=true|false` 控制 annotated 图像诊断订阅，默认 `false`。
+- typed-first transport 为默认策略；legacy publish 只作为显式回滚能力保留。
+- 只有设置 `INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED=1` 时，Gateway 才允许回退到本地 action runtime。
+- 不要把 CI、静态检查或 relaxed gate 描述成真实硬件环境已完成正式交付验证。
+
+## Release evidence closure rules
+
+Formal runnable release eligibility is derived from strict runtime evidence, frontend dist presence, and generated manifest checks. Simulation evidence is written through `scripts/write_runtime_validation_evidence.py`; hardware evidence must use the same schema before `scripts/build_release_bundle.sh` can produce a formal bundle. Diagnostic ROS topics are retained for troubleshooting but are excluded from `releaseTopics` and cannot satisfy the core release evidence requirement.

@@ -1,0 +1,2604 @@
+{
+  "components": {
+    "schemas": {
+      "ChangeGatewayPasswordRequest": {
+        "additionalProperties": false,
+        "description": "Change the password of the current authenticated session.",
+        "properties": {
+          "currentPassword": {
+            "description": "Current password bound to the active session.",
+            "minLength": 1,
+            "title": "Currentpassword",
+            "type": "string"
+          },
+          "newPassword": {
+            "description": "Replacement password for the active session.",
+            "minLength": 1,
+            "title": "Newpassword",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "title": "ChangeGatewayPasswordRequest",
+        "type": "object"
+      },
+      "EmptyActionRequest": {
+        "additionalProperties": false,
+        "description": "Empty payload used by actions that carry no caller-provided parameters.",
+        "properties": {},
+        "title": "EmptyActionRequest",
+        "type": "object"
+      },
+      "ExecuteReplayRequest": {
+        "additionalProperties": false,
+        "description": "Replay one persisted inspection trace.",
+        "properties": {
+          "traceId": {
+            "description": "Persisted trace identifier to replay.",
+            "minLength": 1,
+            "title": "Traceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "traceId"
+        ],
+        "title": "ExecuteReplayRequest",
+        "type": "object"
+      },
+      "ExportBatchRequest": {
+        "additionalProperties": false,
+        "description": "Export one persisted batch bundle.",
+        "properties": {
+          "batchId": {
+            "description": "Batch identifier to export.",
+            "minLength": 1,
+            "title": "Batchid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batchId"
+        ],
+        "title": "ExportBatchRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoginGatewaySessionRequest": {
+        "additionalProperties": false,
+        "description": "Authenticate one gateway session.\n\nArgs:\n    username: Operator login name.\n    password: Operator password.\n\nReturns:\n    The request payload serialized through :meth:`to_payload`.\n\nRaises:\n    ValidationError: Raised by Pydantic when required fields are missing or\n        empty.\n\nBoundary behavior:\n    Unknown JSON keys are rejected so the login contract cannot silently\n    drift from the frontend SDK.",
+        "properties": {
+          "password": {
+            "description": "Operator password.",
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "description": "Operator login name.",
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginGatewaySessionRequest",
+        "type": "object"
+      },
+      "MaintenanceModeRequest": {
+        "additionalProperties": false,
+        "description": "Switch maintenance mode through the canonical action plane.",
+        "properties": {
+          "enabled": {
+            "description": "Target maintenance-mode state.",
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "MaintenanceModeRequest",
+        "type": "object"
+      },
+      "RecipeSortRuleRequest": {
+        "additionalProperties": false,
+        "description": "One rule shown in the HMI recipe editor.",
+        "properties": {
+          "action": {
+            "description": "Sort action triggered when the condition evaluates to true.",
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "condition": {
+            "description": "Predicate expression used to match one inspection outcome.",
+            "minLength": 1,
+            "title": "Condition",
+            "type": "string"
+          }
+        },
+        "required": [
+          "condition",
+          "action"
+        ],
+        "title": "RecipeSortRuleRequest",
+        "type": "object"
+      },
+      "ResetStationRequest": {
+        "additionalProperties": false,
+        "description": "Reset one station fault and optionally resume automation.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional operator reason stored with the reset request.",
+            "title": "Reason"
+          },
+          "resumeAfter": {
+            "default": false,
+            "description": "Whether the station should resume automation after the fault reset completes.",
+            "title": "Resumeafter",
+            "type": "boolean"
+          }
+        },
+        "title": "ResetStationRequest",
+        "type": "object"
+      },
+      "SaveRecipeRequest": {
+        "additionalProperties": false,
+        "description": "Persist one HMI recipe profile.\n\nThe request mirrors the editable recipe profile used by the frontend. It is\nintentionally typed so the generated SDK can provide an exact payload shape\ninstead of falling back to ``Record<string, unknown>``.",
+        "properties": {
+          "changeNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional free-form change note persisted into the recipe metadata.",
+            "title": "Changenote"
+          },
+          "enabled": {
+            "default": false,
+            "description": "Whether the recipe is currently active in the HMI projection.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Stable recipe identifier.",
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Recipe display name shown in the HMI.",
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "qrRoi": {
+            "description": "QR ROI [x, y, w, h].",
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Qrroi",
+            "type": "array"
+          },
+          "roi": {
+            "description": "Color ROI [x, y, w, h].",
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Roi",
+            "type": "array"
+          },
+          "sortRules": {
+            "description": "Ordered HMI sort rules projected into the recipe metadata.",
+            "items": {
+              "$ref": "#/components/schemas/RecipeSortRuleRequest"
+            },
+            "title": "Sortrules",
+            "type": "array"
+          },
+          "targetPart": {
+            "description": "Target part or product family described by the recipe.",
+            "minLength": 1,
+            "title": "Targetpart",
+            "type": "string"
+          },
+          "thresholdsSummary": {
+            "description": "Human-readable summary of the effective thresholds.",
+            "minLength": 1,
+            "title": "Thresholdssummary",
+            "type": "string"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional updated-at timestamp supplied by the HMI editor.",
+            "title": "Updatedat"
+          },
+          "updatedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional operator name attributed to the edit.",
+            "title": "Updatedby"
+          },
+          "version": {
+            "description": "Semantic recipe version string.",
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "targetPart",
+          "roi",
+          "qrRoi",
+          "thresholdsSummary"
+        ],
+        "title": "SaveRecipeRequest",
+        "type": "object"
+      },
+      "StartBatchRequest": {
+        "additionalProperties": false,
+        "description": "Start one production batch.\n\nArgs:\n    recipeId: Activated recipe identifier to execute.\n    batchId: Optional caller-provided batch identifier.",
+        "properties": {
+          "batchId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional caller-provided batch identifier.",
+            "title": "Batchid"
+          },
+          "recipeId": {
+            "description": "Activated recipe identifier used by the next batch run.",
+            "minLength": 1,
+            "title": "Recipeid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipeId"
+        ],
+        "title": "StartBatchRequest",
+        "type": "object"
+      },
+      "SwitchRecipeRequest": {
+        "additionalProperties": false,
+        "description": "Validate one recipe and optionally activate it for the next run.",
+        "properties": {
+          "dryRun": {
+            "default": false,
+            "description": "When true, validate the recipe without activating it.",
+            "title": "Dryrun",
+            "type": "boolean"
+          },
+          "recipeId": {
+            "description": "Recipe identifier to validate and optionally activate.",
+            "minLength": 1,
+            "title": "Recipeid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipeId"
+        ],
+        "title": "SwitchRecipeRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Inspection HMI Gateway",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "index__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Index"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "legacy_health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Legacy Health Api Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy Health"
+      }
+    },
+    "/api/v1/actions/capability-matrix": {
+      "get": {
+        "operationId": "getActionCapabilityMatrix",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getactioncapabilitymatrix",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get the effective action capability matrix",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/catalog": {
+      "get": {
+        "operationId": "getActionCatalog",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_non_production",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Non Production",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getactioncatalog",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List the public action catalog",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/create-batch": {
+      "post": {
+        "operationId": "submitCreateBatchAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitcreatebatchaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the create-batch action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/diagnostics/capture-frame": {
+      "post": {
+        "operationId": "submitDiagnosticCaptureFrameAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitdiagnosticcaptureframeaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the capture-frame diagnostic action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/diagnostics/test-lighting": {
+      "post": {
+        "operationId": "submitDiagnosticTestLightingAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitdiagnostictestlightingaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the lighting diagnostic action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/diagnostics/test-sort-actuator": {
+      "post": {
+        "operationId": "submitDiagnosticTestSortActuatorAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitdiagnostictestsortactuatoraction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the sort-actuator diagnostic action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/execute-replay": {
+      "post": {
+        "operationId": "submitExecuteReplayAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitexecutereplayaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the trace replay action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/export-batch": {
+      "post": {
+        "operationId": "submitExportBatchAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitexportbatchaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the batch export action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/jobs": {
+      "get": {
+        "operationId": "listActionJobs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Listactionjobs",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List action jobs",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/jobs/{job_id}": {
+      "get": {
+        "operationId": "getActionJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getactionjob",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get one action job",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancelActionJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Cancelactionjob",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel one action job",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/reset-station": {
+      "post": {
+        "operationId": "submitResetStationAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetStationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitresetstationaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the reset-station action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/set-maintenance-mode": {
+      "post": {
+        "operationId": "submitMaintenanceModeAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitmaintenancemodeaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the maintenance-mode action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/start-batch": {
+      "post": {
+        "operationId": "submitStartBatchAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitstartbatchaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the start-batch action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/stop-station": {
+      "post": {
+        "operationId": "submitStopStationAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitstopstationaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the stop-station action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/actions/switch-recipe": {
+      "post": {
+        "operationId": "submitSwitchRecipeAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchRecipeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submitswitchrecipeaction",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit the recipe validation and activation action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/api/v1/audit": {
+      "get": {
+        "operationId": "getAuditEntries",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getauditentries",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Audit",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "operationId": "changeGatewayPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeGatewayPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Changegatewaypassword",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change Password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "loginGatewaySession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginGatewaySessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Logingatewaysession",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logoutGatewaySession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Logoutgatewaysession",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "getGatewaySession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getgatewaysession",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Session Info",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/ws-ticket": {
+      "post": {
+        "operationId": "issueGatewayWsTicket",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Issuegatewaywsticket",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Issue Ws Ticket",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/diagnostics": {
+      "get": {
+        "description": "Return the projected diagnostics snapshot.\n\nArgs:\n    svc: Bound diagnostics query service.\n    _session: Authenticated viewer session.\n\nReturns:\n    Standard API envelope containing projected diagnostics items.\n\nRaises:\n    No route-specific exception is intentionally raised.\n\nBoundary behavior:\n    Diagnostics mutations must use the canonical action plane under\n    ``/api/v1/actions/diagnostics/*``. The legacy rollback façade has been\n    removed.",
+        "operationId": "getDiagnosticsSnapshot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getdiagnosticssnapshot",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get diagnostics items",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/v1/exports/jobs": {
+      "get": {
+        "operationId": "list_export_jobs_api_v1_exports_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Export Jobs Api V1 Exports Jobs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Export Jobs",
+        "tags": [
+          "exports"
+        ]
+      }
+    },
+    "/api/v1/exports/jobs/{job_id}": {
+      "get": {
+        "operationId": "get_export_job_api_v1_exports_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Export Job Api V1 Exports Jobs  Job Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Export Job",
+        "tags": [
+          "exports"
+        ]
+      }
+    },
+    "/api/v1/exports/results/{result_id}": {
+      "post": {
+        "operationId": "export_result_api_v1_exports_results__result_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Result Api V1 Exports Results  Result Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Result",
+        "tags": [
+          "exports"
+        ]
+      }
+    },
+    "/api/v1/exports/traces/{trace_id}": {
+      "post": {
+        "operationId": "export_trace_api_v1_exports_traces__trace_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Trace Api V1 Exports Traces  Trace Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Trace",
+        "tags": [
+          "exports"
+        ]
+      }
+    },
+    "/api/v1/exports/{batch_id}": {
+      "post": {
+        "operationId": "export_batch_api_v1_exports__batch_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Batch Api V1 Exports  Batch Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Batch",
+        "tags": [
+          "exports"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Health Api V1 Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/recipes": {
+      "get": {
+        "operationId": "getRecipes",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getrecipes",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Recipes",
+        "tags": [
+          "recipes"
+        ]
+      },
+      "post": {
+        "operationId": "saveRecipe",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRecipeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Saverecipe",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save Recipe",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/v1/recipes/{recipe_id}/activate": {
+      "post": {
+        "deprecated": true,
+        "operationId": "activateRecipeDirect",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Activaterecipedirect",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Deprecated compatibility redirect to switch-recipe action",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/v1/recipes/{recipe_id}/history": {
+      "get": {
+        "operationId": "getRecipeHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipe_id",
+            "required": true,
+            "schema": {
+              "title": "Recipe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getrecipehistory",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Recipe History",
+        "tags": [
+          "recipes"
+        ]
+      }
+    },
+    "/api/v1/replay/traces": {
+      "get": {
+        "operationId": "list_traces_api_v1_replay_traces_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "batch_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Decision",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Traces Api V1 Replay Traces Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Traces",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/v1/replay/traces/{trace_id}": {
+      "get": {
+        "operationId": "get_trace_api_v1_replay_traces__trace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Trace Api V1 Replay Traces  Trace Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Trace",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/v1/replay/traces/{trace_id}/compare": {
+      "get": {
+        "operationId": "compare_trace_api_v1_replay_traces__trace_id__compare_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Compare Trace Api V1 Replay Traces  Trace Id  Compare Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Compare Trace",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/v1/results": {
+      "get": {
+        "operationId": "getInspectionResults",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "batchId",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Batchid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recipeId",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Recipeid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Decision",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "defectType",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Defecttype",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "qrText",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Qrtext",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getinspectionresults",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Results",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/results/read-model/repair": {
+      "post": {
+        "operationId": "repairInspectionReadModel",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Repairinspectionreadmodel",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Repair Read Model",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/results/read-model/status": {
+      "get": {
+        "operationId": "getInspectionReadModelStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getinspectionreadmodelstatus",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Read Model Status",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/results/statistics": {
+      "get": {
+        "operationId": "getInspectionResultStatistics",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "batchId",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Batchid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recipeId",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Recipeid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Decision",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "defectType",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Defecttype",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "qrText",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Qrtext",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sampleLimit",
+            "required": false,
+            "schema": {
+              "default": 120,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Samplelimit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getinspectionresultstatistics",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Result Statistics",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/results/summary/{batch_id}": {
+      "get": {
+        "operationId": "getBatchResultSummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getbatchresultsummary",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Result Summary",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/results/{result_id}": {
+      "get": {
+        "operationId": "getInspectionResultDetail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getinspectionresultdetail",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Result Detail",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/station/snapshot": {
+      "get": {
+        "description": "Return the current projected station snapshot.",
+        "operationId": "getStationSnapshot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getstationsnapshot",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get the station snapshot",
+        "tags": [
+          "station"
+        ]
+      }
+    },
+    "/api/v1/station/stats": {
+      "get": {
+        "description": "Return the current projected station counter payload.",
+        "operationId": "getStationStats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Getstationstats",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get station counters",
+        "tags": [
+          "station"
+        ]
+      }
+    },
+    "/api/v1/telemetry/bridges": {
+      "get": {
+        "operationId": "list_telemetry_bridges_api_v1_telemetry_bridges_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Telemetry Bridges Api V1 Telemetry Bridges Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Telemetry Bridges",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/artifacts/{artifact_path}": {
+      "get": {
+        "operationId": "read_artifact_artifacts__artifact_path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_path",
+            "required": true,
+            "schema": {
+              "title": "Artifact Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Artifact"
+      }
+    }
+  }
+}

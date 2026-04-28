@@ -13,8 +13,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from inspection_utils.read_model_projection import build_result_projection
-from inspection_utils.read_model_store import ReadModelStore
+from inspection_utils.model_common import build_result_projection
+from inspection_utils.model_common import ReadModelStore
 
 from .evidence_repository import TraceEvidenceRepository
 

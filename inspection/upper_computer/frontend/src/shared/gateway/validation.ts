@@ -1,4 +1,5 @@
 import type {
+  ActionJobUpdate,
   ArtifactRef,
   AuthSession,
   CameraFrame,
@@ -8,8 +9,10 @@ import type {
   FaultEvent,
   HeartbeatStatus,
   InspectionResult,
+  ObservedInspectionResult,
   ReadModelStatus,
   RecipeProfile,
+  ResultStatisticsSnapshot,
   RecipeRule,
   StationMaintenanceState,
   StationStateSnapshot,
@@ -184,6 +187,42 @@ export function parseInspectionResult(value: unknown): InspectionResult {
   };
 }
 
+
+export function parseObservedInspectionResult(value: unknown): ObservedInspectionResult {
+  const object = expectObject(value, 'ObservedInspectionResult');
+  const breakdown = expectObject(object.breakdown, 'ObservedInspectionResult.breakdown');
+  return {
+    id: expectString(object.id, 'ObservedInspectionResult.id'),
+    timestamp: expectString(object.timestamp, 'ObservedInspectionResult.timestamp'),
+    batchId: expectString(object.batchId, 'ObservedInspectionResult.batchId'),
+    recipeId: expectString(object.recipeId, 'ObservedInspectionResult.recipeId'),
+    recipeName: expectString(object.recipeName, 'ObservedInspectionResult.recipeName'),
+    decision: object.decision === undefined ? undefined : expectString(object.decision, 'ObservedInspectionResult.decision') as ObservedInspectionResult['decision'],
+    category: expectOptional(object.category, 'ObservedInspectionResult.category', expectString),
+    defectType: expectOptional(object.defectType, 'ObservedInspectionResult.defectType', expectString),
+    qrText: expectOptional(object.qrText, 'ObservedInspectionResult.qrText', expectString),
+    metricValue: expectOptional(object.metricValue, 'ObservedInspectionResult.metricValue', expectNumber),
+    metricLabel: expectOptional(object.metricLabel, 'ObservedInspectionResult.metricLabel', expectString),
+    cycleMs: expectNumber(object.cycleMs, 'ObservedInspectionResult.cycleMs'),
+    traceId: expectOptional(object.traceId, 'ObservedInspectionResult.traceId', expectString),
+    traceUrl: expectOptional(object.traceUrl, 'ObservedInspectionResult.traceUrl', expectString),
+    artifactCount: expectOptional(object.artifactCount, 'ObservedInspectionResult.artifactCount', expectNumber),
+    imageUrl: expectOptional(object.imageUrl, 'ObservedInspectionResult.imageUrl', expectString),
+    overlayUrl: expectOptional(object.overlayUrl, 'ObservedInspectionResult.overlayUrl', expectString),
+    artifacts: expectOptional(object.artifacts, 'ObservedInspectionResult.artifacts', (item, label) => expectArray(item, label, parseArtifactRef)),
+    traceBundle: expectOptional(object.traceBundle, 'ObservedInspectionResult.traceBundle', parseTraceBundle),
+    explanation: expectArray(object.explanation, 'ObservedInspectionResult.explanation', expectString),
+    breakdown: {
+      feedingMs: expectNumber(breakdown.feedingMs, 'ObservedInspectionResult.breakdown.feedingMs'),
+      captureMs: expectNumber(breakdown.captureMs, 'ObservedInspectionResult.breakdown.captureMs'),
+      analyzeMs: expectNumber(breakdown.analyzeMs, 'ObservedInspectionResult.breakdown.analyzeMs'),
+      sortingMs: expectNumber(breakdown.sortingMs, 'ObservedInspectionResult.breakdown.sortingMs'),
+      totalMs: expectNumber(breakdown.totalMs, 'ObservedInspectionResult.breakdown.totalMs'),
+    },
+    stage: 'OBSERVED',
+  };
+}
+
 export function parseRecipeProfile(value: unknown): RecipeProfile {
   const object = expectObject(value, 'RecipeProfile');
   return {
@@ -307,6 +346,80 @@ function parseOrchestratorAdvice(value: unknown) {
   };
 }
 
+
+
+function parseActionJobUpdate(value: unknown): ActionJobUpdate {
+  const object = expectObject(value, 'ActionJobUpdate');
+  return {
+    jobId: expectString(object.jobId, 'ActionJobUpdate.jobId'),
+    kind: expectOptional(object.kind, 'ActionJobUpdate.kind', expectString),
+    status: expectString(object.status, 'ActionJobUpdate.status'),
+    progress: typeof object.progress === 'number' ? expectNumber(object.progress, 'ActionJobUpdate.progress') : undefined,
+    message: expectOptional(object.message, 'ActionJobUpdate.message', expectString),
+    result: typeof object.result === 'object' && object.result !== null ? object.result as Record<string, unknown> : undefined,
+    error: typeof object.error === 'object' && object.error !== null ? object.error as { message?: string; detail?: string; code?: string } : undefined,
+  };
+}
+
+function parseResultStatisticsSnapshot(value: unknown): ResultStatisticsSnapshot {
+  const object = expectObject(value, 'ResultStatisticsSnapshot');
+  const filters = expectObject(object.filters ?? {}, 'ResultStatisticsSnapshot.filters');
+  const summary = expectObject(object.summary, 'ResultStatisticsSnapshot.summary');
+  return {
+    filters: {
+      batchId: expectOptional(filters.batchId, 'ResultStatisticsSnapshot.filters.batchId', expectString),
+      recipeId: expectOptional(filters.recipeId, 'ResultStatisticsSnapshot.filters.recipeId', expectString),
+      decision: expectOptional(filters.decision, 'ResultStatisticsSnapshot.filters.decision', expectString),
+      defectType: expectOptional(filters.defectType, 'ResultStatisticsSnapshot.filters.defectType', expectString),
+      qrText: expectOptional(filters.qrText, 'ResultStatisticsSnapshot.filters.qrText', expectString),
+      from: expectOptional(filters.from, 'ResultStatisticsSnapshot.filters.from', expectString),
+      to: expectOptional(filters.to, 'ResultStatisticsSnapshot.filters.to', expectString),
+    },
+    summary: {
+      total: expectNumber(summary.total, 'ResultStatisticsSnapshot.summary.total'),
+      okCount: expectNumber(summary.okCount, 'ResultStatisticsSnapshot.summary.okCount'),
+      ngCount: expectNumber(summary.ngCount, 'ResultStatisticsSnapshot.summary.ngCount'),
+      recheckCount: expectNumber(summary.recheckCount, 'ResultStatisticsSnapshot.summary.recheckCount'),
+      yieldRate: expectNumber(summary.yieldRate, 'ResultStatisticsSnapshot.summary.yieldRate'),
+      avgCycleMs: expectNumber(summary.avgCycleMs, 'ResultStatisticsSnapshot.summary.avgCycleMs'),
+      p95CycleMs: expectNumber(summary.p95CycleMs, 'ResultStatisticsSnapshot.summary.p95CycleMs'),
+      sampleCount: expectNumber(summary.sampleCount, 'ResultStatisticsSnapshot.summary.sampleCount'),
+    },
+    decisionBreakdown: expectArray(object.decisionBreakdown ?? [], 'ResultStatisticsSnapshot.decisionBreakdown', (entry, label) => {
+      const item = expectObject(entry, label);
+      return { decision: expectString(item.decision, `${label}.decision`), count: expectNumber(item.count, `${label}.count`) };
+    }),
+    defectBreakdown: expectArray(object.defectBreakdown ?? [], 'ResultStatisticsSnapshot.defectBreakdown', (entry, label) => {
+      const item = expectObject(entry, label);
+      return { name: expectString(item.name, `${label}.name`), count: expectNumber(item.count, `${label}.count`) };
+    }),
+    recipeBreakdown: expectArray(object.recipeBreakdown ?? [], 'ResultStatisticsSnapshot.recipeBreakdown', (entry, label) => {
+      const item = expectObject(entry, label);
+      return {
+        recipeId: expectString(item.recipeId, `${label}.recipeId`),
+        recipeName: expectString(item.recipeName, `${label}.recipeName`),
+        total: expectNumber(item.total, `${label}.total`),
+        okCount: expectNumber(item.okCount, `${label}.okCount`),
+        ngCount: expectNumber(item.ngCount, `${label}.ngCount`),
+        recheckCount: expectNumber(item.recheckCount, `${label}.recheckCount`),
+        yieldRate: expectNumber(item.yieldRate, `${label}.yieldRate`),
+      };
+    }),
+    cycleTrend: expectArray(object.cycleTrend ?? [], 'ResultStatisticsSnapshot.cycleTrend', (entry, label) => {
+      const item = expectObject(entry, label);
+      return {
+        id: expectString(item.id, `${label}.id`),
+        timestamp: expectString(item.timestamp, `${label}.timestamp`),
+        cycleMs: expectNumber(item.cycleMs, `${label}.cycleMs`),
+        decision: expectString(item.decision, `${label}.decision`),
+        recipeId: expectString(item.recipeId, `${label}.recipeId`),
+        recipeName: expectString(item.recipeName, `${label}.recipeName`),
+      };
+    }),
+    readModelStatus: object.readModelStatus === undefined || object.readModelStatus === null ? undefined : parseReadModelStatus(object.readModelStatus),
+  };
+}
+
 function parseFaultCleared(value: unknown): { id: string } {
   const object = expectObject(value, 'FaultCleared');
   return { id: expectString(object.id, 'FaultCleared.id') };
@@ -317,6 +430,8 @@ export const gatewayValidators: {
 } = {
   'station.state.updated': (value) => parseStationStateSnapshot(value),
   'station.count.updated': (value) => parseCountStats(value),
+  'inspection.result.observed': (value) => parseObservedInspectionResult(value),
+  'inspection.result.finalized': (value) => parseInspectionResult(value),
   'inspection.result.created': (value) => parseInspectionResult(value),
   'fault.raised': (value) => parseFaultEvent(value),
   'fault.cleared': (value) => parseFaultCleared(value),
@@ -324,6 +439,7 @@ export const gatewayValidators: {
   'system.heartbeat': (value) => parseHeartbeatStatus(value),
   'auth.session': (value) => parseAuthSession(value),
   'orchestrator.advice': (value) => parseOrchestratorAdvice(value),
+  'action.job.updated': (value) => parseActionJobUpdate(value),
 };
 
 export function validateResultsArray(value: unknown): InspectionResult[] {
@@ -336,4 +452,8 @@ export function validateRecipesArray(value: unknown): RecipeProfile[] {
 
 export function validateDiagnosticsArray(value: unknown): DiagnosticsItem[] {
   return expectArray(value, 'DiagnosticsItem[]', (item) => parseDiagnosticsItem(item));
+}
+
+export function parseResultStatistics(value: unknown): ResultStatisticsSnapshot {
+  return parseResultStatisticsSnapshot(value);
 }

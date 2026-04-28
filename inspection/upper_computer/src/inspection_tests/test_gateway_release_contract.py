@@ -19,12 +19,13 @@ def test_resolve_gateway_paths_requires_frontend_bundle_when_enabled(tmp_path, m
     else:
         raise AssertionError('expected FileNotFoundError')
 
-def test_release_launches_enable_strict_frontend_dist() -> None:
+def test_source_delivery_launches_default_frontend_dist_to_optional() -> None:
     root = Path(__file__).resolve().parents[2]
-    bringup = (root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py').read_text(encoding='utf-8')
+    bringup = (root / 'src' / 'inspection_bringup' / 'launch' / 'sim_stack.launch.py').read_text(encoding='utf-8')
     gateway = (root / 'src' / 'inspection_hmi_gateway' / 'launch' / 'hmi_gateway.launch.py').read_text(encoding='utf-8')
     assert 'build_simulated_stack' in bringup
     assert 'INSPECTION_HMI_REQUIRE_FRONTEND_DIST' in gateway
+    assert "DeclareLaunchArgument('require_frontend_dist', default_value='false')" in gateway
 
 
 def test_bringup_launch_enforces_strict_user_config() -> None:

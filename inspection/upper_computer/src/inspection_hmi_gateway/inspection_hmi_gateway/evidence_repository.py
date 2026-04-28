@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from inspection_utils.logging_tools import safe_json_loads
-from inspection_utils.paths import relative_artifact_path, resolve_runtime_path
+from inspection_utils.logging_common import safe_json_loads
+from inspection_utils.io_common import relative_artifact_path, resolve_runtime_path
 
 
 def _safe_int(value: Any, default: int = -1) -> int:
@@ -138,18 +138,22 @@ class TraceEvidenceRepository:
             normalized_path = str(path or '').replace('\\', '/').lstrip('/')
             if not normalized_path:
                 return
-            key = (kind, normalized_path)
+            try:
+                payload = self._artifact_payload(
+                    kind=kind,
+                    path=normalized_path,
+                    trace_id=trace_id,
+                    batch_id=str(row.get('batch_id', summary.get('batch_id', ''))),
+                    item_id=_safe_int(row.get('item_id', summary.get('item_id', -1)), default=-1),
+                    source=source,
+                )
+            except ValueError:
+                return
+            key = (kind, str(payload.get('path', '')))
             if key in seen:
                 return
             seen.add(key)
-            artifacts.append(self._artifact_payload(
-                kind=kind,
-                path=normalized_path,
-                trace_id=trace_id,
-                batch_id=str(row.get('batch_id', summary.get('batch_id', ''))),
-                item_id=_safe_int(row.get('item_id', summary.get('item_id', -1)), default=-1),
-                source=source,
-            ))
+            artifacts.append(payload)
 
         add('raw', str(row.get('image_path', '')), source='result_csv')
         add('annotated', str(row.get('annotated_image_path', '')), source='result_csv')

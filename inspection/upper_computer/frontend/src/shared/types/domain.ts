@@ -114,6 +114,11 @@ export interface InspectionResult {
   breakdown: CycleBreakdown;
 }
 
+export interface ObservedInspectionResult extends Omit<InspectionResult, 'decision'> {
+  decision?: Decision;
+  stage: 'OBSERVED';
+}
+
 export interface FaultEvent {
   id: string;
   code: string;
@@ -181,6 +186,43 @@ export interface DiagnosticsActionResult {
   updatedItems?: DiagnosticsItem[];
 }
 
+export type ActionGovernanceTier = 'official' | 'compatibility' | 'experimental' | 'qa_tooling';
+
+export interface ActionGovernanceMetadata {
+  tier: ActionGovernanceTier;
+  lifecycle: string;
+  sunsetRelease?: string;
+  promotionCriteria: string[];
+  requiredVerification: string[];
+  documentationRefs: string[];
+  uiLabel?: string;
+}
+
+export interface ActionCapabilityMetadata {
+  availability: string;
+  visibility: string;
+  executionPolicy: string;
+  runtimeTruth: string;
+  summary: string;
+  submitEnabled: boolean;
+  submitReason?: string;
+  experimentalEnv?: string;
+}
+
+export interface ActionDeploymentMetadata {
+  kind: string;
+  type: string;
+  topic: string;
+  requiredPayload: string[];
+}
+
+export interface ActionCatalogEntry extends ActionDeploymentMetadata {
+  capability: ActionCapabilityMetadata;
+  governance: ActionGovernanceMetadata;
+}
+
+export type ActionCapabilityMatrix = Record<string, ActionCatalogEntry>;
+
 
 export interface OrchestratorAdviceAction {
   action: string;
@@ -223,4 +265,83 @@ export interface ResultQuery {
   to?: string;
   limit?: number;
   offset?: number;
+}
+
+
+export interface ActionJobErrorPayload {
+  message?: string;
+  detail?: string;
+  code?: string;
+}
+
+export interface ActionJobUpdate {
+  jobId: string;
+  kind?: string;
+  status: string;
+  progress?: number;
+  message?: string;
+  result?: Record<string, unknown>;
+  error?: ActionJobErrorPayload;
+}
+
+export interface ResultStatisticsQuery extends ResultQuery {
+  sampleLimit?: number;
+}
+
+export interface ResultStatisticsSummary {
+  total: number;
+  okCount: number;
+  ngCount: number;
+  recheckCount: number;
+  yieldRate: number;
+  avgCycleMs: number;
+  p95CycleMs: number;
+  sampleCount: number;
+}
+
+export interface ResultDecisionBreakdown {
+  decision: string;
+  count: number;
+}
+
+export interface ResultDefectBreakdown {
+  name: string;
+  count: number;
+}
+
+export interface ResultRecipeBreakdown {
+  recipeId: string;
+  recipeName: string;
+  total: number;
+  okCount: number;
+  ngCount: number;
+  recheckCount: number;
+  yieldRate: number;
+}
+
+export interface ResultCycleTrendPoint {
+  id: string;
+  timestamp: string;
+  cycleMs: number;
+  decision: string;
+  recipeId: string;
+  recipeName: string;
+}
+
+export interface ResultStatisticsSnapshot {
+  filters: {
+    batchId?: string;
+    recipeId?: string;
+    decision?: string;
+    defectType?: string;
+    qrText?: string;
+    from?: string;
+    to?: string;
+  };
+  summary: ResultStatisticsSummary;
+  decisionBreakdown: ResultDecisionBreakdown[];
+  defectBreakdown: ResultDefectBreakdown[];
+  recipeBreakdown: ResultRecipeBreakdown[];
+  cycleTrend: ResultCycleTrendPoint[];
+  readModelStatus?: ReadModelStatus;
 }

@@ -48,3 +48,9 @@ def test_cancel_item_returns_ready_and_restarts_cycle():
     result = transition(data, StationEvent.CANCEL_ITEM, 'cancel')
     assert result.next_phase == StationPhase.READY
     assert result.commands == ['clear_cycle', 'start_cycle']
+
+
+def test_fsm_data_defaults_do_not_invent_gateway_binding():
+    data = FSMData()
+    assert data.batch_id == ''
+    assert data.recipe_id == ''

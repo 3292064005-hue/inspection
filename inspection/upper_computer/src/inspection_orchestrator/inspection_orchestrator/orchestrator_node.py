@@ -8,14 +8,14 @@ try:
 except ImportError:  # pragma: no cover - ROS interface generation unavailable in unit-test environments
     ControlCommand = DiagnosticsSnapshot = SupervisorStateEnvelope = None
 
-from inspection_utils.logging_tools import event_to_json, safe_json_loads
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.param_parsing import parameter_as_bool
-from inspection_utils.qos import qos_profile
-from inspection_utils.runtime_node import InspectionRuntimeNode
-from inspection_utils.transport_adapters import legacy_payload_json_from_typed_message, publish_dual_control
-from inspection_utils.transport_contracts import CONTROL_TOPIC_TYPED, DIAGNOSTICS_TOPIC_TYPED, SUPERVISOR_STATE_TOPIC_TYPED
-from inspection_utils.typed_interfaces import assert_typed_interfaces_available
+from inspection_utils.logging_common import event_to_json, safe_json_loads
+from inspection_utils.runtime_common import ManagedNodeMixin
+from inspection_utils.config_common import parameter_as_bool
+from inspection_utils.runtime_common import qos_profile
+from inspection_utils.runtime_common import InspectionRuntimeNode
+from inspection_utils.transport_common import normalized_payload_from_typed_message, publish_dual_control
+from inspection_utils.transport_common import CONTROL_TOPIC_TYPED, DIAGNOSTICS_TOPIC_TYPED, SUPERVISOR_STATE_TOPIC_TYPED
+from inspection_utils.runtime_common import assert_typed_interfaces_available
 from .task_tree.auto_run_tree import plan_auto_run
 from .task_tree.benchmark_tree import plan_benchmark
 from .task_tree.maintenance_tree import plan_maintenance
@@ -83,20 +83,22 @@ class OrchestratorNode(ManagedNodeMixin, InspectionRuntimeNode):
         return True, 'orchestrator shutdown'
 
     def on_supervisor(self, msg: String) -> None:
-        self.last_supervisor = safe_json_loads(msg.data)
+        self.on_supervisor_payload(safe_json_loads(msg.data))
+
+    def on_supervisor_payload(self, payload: dict[str, object]) -> None:
+        self.last_supervisor = payload
 
     def on_typed_supervisor(self, msg: object) -> None:
-        legacy = String()
-        legacy.data = legacy_payload_json_from_typed_message(msg, default_event_type='supervisor_state')
-        self.on_supervisor(legacy)
+        self.on_supervisor_payload(normalized_payload_from_typed_message(msg, default_event_type='supervisor_state', bridge_name='supervisor_state'))
 
     def on_diagnostics(self, msg: String) -> None:
-        self.last_diagnostics = safe_json_loads(msg.data)
+        self.on_diagnostics_payload(safe_json_loads(msg.data))
+
+    def on_diagnostics_payload(self, payload: dict[str, object]) -> None:
+        self.last_diagnostics = payload
 
     def on_typed_diagnostics(self, msg: object) -> None:
-        legacy = String()
-        legacy.data = legacy_payload_json_from_typed_message(msg, default_event_type='diagnostics_snapshot')
-        self.on_diagnostics(legacy)
+        self.on_diagnostics_payload(normalized_payload_from_typed_message(msg, default_event_type='diagnostics_snapshot', bridge_name='diagnostics'))
 
     def publish_action(self, command: str, **extra: object) -> None:
         reason = str(extra.get('reason', ''))

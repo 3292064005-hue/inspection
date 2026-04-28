@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SPLIT_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
 ARTIFACT_DIR="$ROOT_DIR/.artifacts/verification"
 cd "$ROOT_DIR"
 
@@ -21,3 +22,12 @@ export INSPECTION_REQUIRE_TYPED_INTERFACES=1
 export PYTHONUNBUFFERED=1
 
 bash "$ROOT_DIR/scripts/run_launch_test_matrix.sh"
+
+python3 "$SPLIT_ROOT/scripts/write_runtime_validation_evidence.py" \
+  --workspace-root "$SPLIT_ROOT" \
+  --scenario-id sim_closed_loop \
+  --operator "${USER:-ci}" \
+  --notes "ROS2 Humble simulation release gate completed." \
+  --log "upper_computer/.artifacts/verification/ros_runtime_preflight.json" \
+  --report "upper_computer/.artifacts/verification/ros_runtime_preflight.json"
+

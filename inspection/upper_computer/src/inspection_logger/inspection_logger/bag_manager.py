@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from inspection_utils.logging_tools import utc_now_str
+from inspection_utils.logging_common import utc_now_str
 
 
 @dataclass(slots=True)

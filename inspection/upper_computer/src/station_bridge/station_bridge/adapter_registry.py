@@ -9,9 +9,11 @@ objects so the bridge node does not silently ignore adapter/protocol settings.
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from inspection_utils.plugin_contracts import PluginManifest
+from inspection_utils.config_common import load_yaml
+from inspection_utils.io_common import resolve_resource_path
+from inspection_utils.vision_common import PluginManifest
 
-from inspection_utils.runtime_contract import (
+from inspection_utils.station_common import (
     normalize_adapter_name as normalize_station_adapter_name,
     normalize_protocol_version_label,
     resolve_protocol_version_number as resolve_station_protocol_version_number,
@@ -38,10 +40,40 @@ class StationAdapterRegistry:
     def manifest_catalog(self) -> list[dict[str, object]]:
         return [manifest.to_dict() for manifest in self.manifests.values()]
 
+DEFAULT_STATION_ADAPTER_MANIFEST_PATH = 'config/system/station_adapter_manifests.yaml'
+
+
+def _load_station_adapter_manifest_catalog(*, path: str = DEFAULT_STATION_ADAPTER_MANIFEST_PATH, start: str | None = None) -> dict[str, PluginManifest]:
+    resolved = resolve_resource_path(path, start=start or __file__)
+    payload = load_yaml(resolved) if resolved.exists() else {}
+    raw_adapters = payload.get('adapters', payload) if isinstance(payload, dict) else {}
+    if not isinstance(raw_adapters, dict):
+        raise ValueError('station adapter manifest payload must be a mapping')
+    manifests: dict[str, PluginManifest] = {}
+    for raw_name, raw_manifest in raw_adapters.items():
+        name = str(raw_name or '').strip()
+        if not name or not isinstance(raw_manifest, dict):
+            continue
+        manifests[name] = PluginManifest(
+            kind='station_adapter',
+            name=name,
+            capabilities=tuple(str(item).strip() for item in raw_manifest.get('capabilities', ()) if str(item).strip()),
+            runtime_truth=str(raw_manifest.get('runtime_truth', raw_manifest.get('runtimeTruth', 'real')) or 'real'),
+            source=str(raw_manifest.get('source', 'generated') or 'generated'),
+            capability_profile=str(raw_manifest.get('capability_profile', raw_manifest.get('capabilityProfile', '')) or ''),
+            owner_plane='station_bridge',
+            verification_requirements=tuple(str(item).strip() for item in raw_manifest.get('verification_requirements', raw_manifest.get('verificationRequirements', ())) if str(item).strip()),
+            promotion_path=tuple(str(item).strip() for item in raw_manifest.get('promotion_path', raw_manifest.get('promotionPath', ('synthetic', 'internal', 'production_ready'))) if str(item).strip()),
+        )
+    if not manifests:
+        raise ValueError('station adapter manifest catalog resolved to an empty set')
+    return manifests
+
 
 REGISTRY = StationAdapterRegistry()
-REGISTRY.register('mock', lambda **kwargs: MockStationAdapter(kwargs['position_delay_sec'], kwargs['sort_delay_sec']), manifest=PluginManifest(kind='station_adapter', name='mock', capabilities=('SORT_ACK', 'HEARTBEAT'), runtime_truth='synthetic', source='builtin'))
-REGISTRY.register('serial', lambda **kwargs: SerialStationAdapter(port=kwargs['serial_port'], baudrate=kwargs['baudrate']), manifest=PluginManifest(kind='station_adapter', name='serial', capabilities=('SORT_ACK', 'HEARTBEAT', 'SERIAL_LINK'), runtime_truth='real', source='builtin'))
+_STATION_ADAPTER_MANIFESTS = _load_station_adapter_manifest_catalog(start=__file__)
+REGISTRY.register('mock', lambda **kwargs: MockStationAdapter(kwargs['position_delay_sec'], kwargs['sort_delay_sec'], capability_payload=kwargs.get('capability_payload')), manifest=_STATION_ADAPTER_MANIFESTS['mock'])
+REGISTRY.register('serial', lambda **kwargs: SerialStationAdapter(port=kwargs['serial_port'], baudrate=kwargs['baudrate']), manifest=_STATION_ADAPTER_MANIFESTS['serial'])
 
 
 def adapter_manifest_catalog() -> list[dict[str, object]]:
@@ -91,7 +123,7 @@ def resolve_protocol_version_number(protocol_version: str | int | None) -> int:
 
 
 
-def build_station_adapter(*, adapter_name: str, position_delay_sec: float, sort_delay_sec: float, serial_port: str, baudrate: int) -> Any:
+def build_station_adapter(*, adapter_name: str, position_delay_sec: float, sort_delay_sec: float, serial_port: str, baudrate: int, capability_payload: dict[str, Any] | None = None) -> Any:
     """Instantiate the effective station adapter for the current runtime.
 
     Args:
@@ -100,6 +132,8 @@ def build_station_adapter(*, adapter_name: str, position_delay_sec: float, sort_
         sort_delay_sec: Mock adapter sorting delay.
         serial_port: Serial adapter device path.
         baudrate: Serial adapter baudrate.
+        capability_payload: Optional derived capability payload forwarded to
+            adapters that can emulate or report capabilities.
 
     Returns:
         Concrete adapter instance implementing the bridge callback contract.
@@ -115,4 +149,5 @@ def build_station_adapter(*, adapter_name: str, position_delay_sec: float, sort_
         sort_delay_sec=sort_delay_sec,
         serial_port=serial_port,
         baudrate=baudrate,
+        capability_payload=capability_payload,
     )

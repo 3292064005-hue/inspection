@@ -4,22 +4,22 @@ import csv
 from pathlib import Path
 from typing import Any
 
-from inspection_utils.logging_tools import safe_json_loads
-from inspection_utils.paths import resolve_runtime_path
-from inspection_utils.read_model_projection import safe_float, safe_int
+from inspection_utils.logging_common import safe_json_loads
+from inspection_utils.io_common import resolve_runtime_path
+from inspection_utils.model_common import safe_float, safe_int
 
 from .evidence_repository import TraceEvidenceRepository
 from .read_model_maintenance import ReadModelMaintenanceCoordinator
 from .read_model_policy import ReadModelPolicy, load_read_model_policy
 from .read_model_repository import ReadModelRepository, ReadModelSyncRequiredError
+from .projection_boundary import projection_boundary_catalog
 
 
 class ResultStore:
     """Query facade for inspection results.
 
     The store treats the SQLite projection as the canonical query surface. Legacy
-    CSV/file scans remain available only when the active policy explicitly opts
-    into degraded fallback mode.
+    CSV/file scans are no longer used as an online query fallback.
     """
 
     def __init__(self, log_root: str | Path = 'logs/runtime', *, read_model_policy: ReadModelPolicy | None = None) -> None:
@@ -30,15 +30,15 @@ class ResultStore:
         self.read_model_policy = read_model_policy or load_read_model_policy()
         self.read_model_repository = ReadModelRepository(self.log_root, policy=self.read_model_policy)
         self.maintenance = ReadModelMaintenanceCoordinator(log_root=self.log_root, repository=self.read_model_repository, policy=self.read_model_policy)
-        self._legacy_records: list[dict[str, Any]] = []
         self._read_model_status: dict[str, Any] = {
             'mode': 'COLD',
             'degraded': False,
             'lastError': '',
             'repairRequired': False,
             'projectionAvailable': False,
-            'fallbackEnabled': bool(self.read_model_policy.fallback_legacy_reads),
+            'fallbackEnabled': False,
             'querySurface': 'projection',
+            'projectionBoundaries': projection_boundary_catalog(),
         }
         try:
             self.maintenance.bootstrap_if_needed()
@@ -71,7 +71,7 @@ class ResultStore:
             'lastError': last_error,
             'repairRequired': bool(repair_required),
             'projectionAvailable': bool(projection_available),
-            'fallbackEnabled': bool(self.read_model_policy.fallback_legacy_reads),
+            'fallbackEnabled': False,
             'querySurface': str(query_surface),
             'maintenanceState': str(maintenance.get('maintenanceState', 'IDLE')),
             'repairRunning': bool(maintenance.get('repairRunning', False)),
@@ -79,6 +79,7 @@ class ResultStore:
             'lastRepairReason': str(maintenance.get('lastReason', '')),
             'sourceSyncToken': str(maintenance.get('sourceSyncToken', readiness.get('sourceSyncToken', ''))),
             'materializedSyncToken': str(maintenance.get('materializedSyncToken', readiness.get('materializedSyncToken', ''))),
+            'projectionBoundaries': projection_boundary_catalog(),
         }
 
     def read_model_status(self, *, refresh: bool = True) -> dict[str, Any]:
@@ -177,60 +178,39 @@ class ResultStore:
             query_surface='projection',
         )
 
-    def _run_legacy_fallback(self, *, mode: str, exc: Exception) -> None:
-        readiness = self.read_model_repository.readiness()
-        self._legacy_records = self._build_records()
-        self._set_read_model_status(
-            mode=mode,
-            degraded=True,
-            last_error=str(exc),
-            repair_required=bool(readiness.get('repairRequired')),
-            projection_available=bool(readiness.get('projectionAvailable')),
-            query_surface='legacy_file_scan',
-        )
-
     def _refresh_if_needed(self) -> None:
         try:
             self._run_projection_refresh()
             return
         except ReadModelSyncRequiredError as exc:
-            if not self.read_model_policy.fallback_legacy_reads:
-                readiness = self.read_model_repository.readiness()
-                self._set_read_model_status(
-                    mode='REPAIR_REQUIRED',
-                    degraded=True,
-                    last_error=str(exc),
-                    repair_required=True,
-                    projection_available=bool(readiness.get('projectionAvailable')),
-                    query_surface='projection',
-                )
-                raise
-            self._run_legacy_fallback(mode='REPAIR_REQUIRED', exc=exc)
+            readiness = self.read_model_repository.readiness()
+            self._set_read_model_status(
+                mode='REPAIR_REQUIRED',
+                degraded=True,
+                last_error=str(exc),
+                repair_required=True,
+                projection_available=bool(readiness.get('projectionAvailable')),
+                query_surface='projection',
+            )
+            raise
         except Exception as exc:
-            if not self.read_model_policy.fallback_legacy_reads:
-                readiness = self.read_model_repository.readiness()
-                self._set_read_model_status(
-                    mode='PROJECTION_ERROR',
-                    degraded=True,
-                    last_error=str(exc),
-                    repair_required=bool(readiness.get('repairRequired')),
-                    projection_available=bool(readiness.get('projectionAvailable')),
-                    query_surface='projection',
-                )
-                raise
-            self._run_legacy_fallback(mode='FALLBACK_FILE_SCAN', exc=exc)
+            readiness = self.read_model_repository.readiness()
+            self._set_read_model_status(
+                mode='PROJECTION_ERROR',
+                degraded=True,
+                last_error=str(exc),
+                repair_required=bool(readiness.get('repairRequired')),
+                projection_available=bool(readiness.get('projectionAvailable')),
+                query_surface='projection',
+            )
+            raise
 
     def repair_read_model(self) -> None:
         self.maintenance.repair(reason='explicit_repair')
         self._refresh_if_needed()
 
-    def _query_surface(self) -> str:
-        return str(self._read_model_status.get('querySurface', 'projection'))
-
     def list_results(self) -> list[dict[str, Any]]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            return [self._attach_read_model_status(dict(item)) for item in self._legacy_records]
         rows = self.read_model_repository.list_results()
         return [self._attach_read_model_status(dict(item)) for item in rows]
 
@@ -287,47 +267,8 @@ class ResultStore:
         filtered, _ = self.query_result_page(**filters)
         return filtered
 
-    def _legacy_matches(self, item: dict[str, Any], *, batch_id: str, recipe_id: str, decision: str, defect_type: str, qr_text: str, from_ts: str, to_ts: str) -> bool:
-        if batch_id and str(item.get('batchId', '')) != str(batch_id):
-            return False
-        if recipe_id and str(item.get('recipeId', '')) != str(recipe_id):
-            return False
-        if decision and str(item.get('decision', '')) != str(decision):
-            return False
-        if defect_type and str(item.get('defectType', '')) != str(defect_type):
-            return False
-        if qr_text and qr_text not in str(item.get('qrText', '')):
-            return False
-        timestamp = str(item.get('timestamp', ''))
-        if from_ts and timestamp and timestamp < str(from_ts):
-            return False
-        if to_ts and timestamp and timestamp > str(to_ts):
-            return False
-        return True
-
     def query_result_page(self, *, batch_id: str = '', recipe_id: str = '', decision: str = '', defect_type: str = '', qr_text: str = '', from_ts: str = '', to_ts: str = '', limit: int | None = None, offset: int = 0) -> tuple[list[dict[str, Any]], int]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            filtered = [
-                dict(item)
-                for item in self._legacy_records
-                if self._legacy_matches(
-                    item,
-                    batch_id=batch_id,
-                    recipe_id=recipe_id,
-                    decision=decision,
-                    defect_type=defect_type,
-                    qr_text=qr_text,
-                    from_ts=from_ts,
-                    to_ts=to_ts,
-                )
-            ]
-            total = len(filtered)
-            if offset:
-                filtered = filtered[offset:]
-            if limit is not None:
-                filtered = filtered[:limit]
-            return [self._attach_read_model_status(dict(row)) for row in filtered], total
         rows, total = self.read_model_repository.query_result_page(batch_id=batch_id, recipe_id=recipe_id, decision=decision, defect_type=defect_type, qr_text=qr_text, from_ts=from_ts, to_ts=to_ts, limit=limit, offset=offset)
         readiness = self.read_model_repository.readiness()
         self._set_read_model_status(
@@ -341,36 +282,18 @@ class ResultStore:
 
     def result_ids_for_batch(self, batch_id: str) -> list[str]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            return [str(item.get('resultId', item.get('id', ''))) for item in self._legacy_records if str(item.get('batchId', '')) == str(batch_id)]
         return self.read_model_repository.result_ids_for_batch(batch_id)
 
     def trace_bundles_for_batch(self, batch_id: str) -> dict[str, dict[str, Any]]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            trace_ids = [str(item.get('traceId', '')) for item in self._legacy_records if str(item.get('batchId', '')) == str(batch_id)]
-            return self.trace_repository.trace_bundles_for_ids(trace_ids)
         return self.read_model_repository.trace_bundles_for_batch(batch_id)
 
     def result_ids_for_trace_ids(self, trace_ids: list[str]) -> list[str]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            normalized = {str(trace_id) for trace_id in trace_ids if str(trace_id)}
-            return [str(item.get('resultId', item.get('id', ''))) for item in self._legacy_records if str(item.get('traceId', '')) in normalized]
         return self.read_model_repository.result_ids_for_trace_ids(trace_ids)
 
     def trace_bundle_for_result(self, result_id: str) -> dict[str, Any]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            trace_id = next(
-                (
-                    str(item.get('traceId', ''))
-                    for item in self._legacy_records
-                    if item.get('id') == result_id or item.get('resultId') == result_id or item.get('traceId') == result_id
-                ),
-                '',
-            )
-            return self.trace_repository.trace_bundle(trace_id) if trace_id else {}
         trace_id = self.read_model_repository.trace_id_for_result(result_id)
         if not trace_id:
             return {}
@@ -378,35 +301,39 @@ class ResultStore:
 
     def artifact_records_for_result_ids(self, result_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            mapping: dict[str, list[dict[str, Any]]] = {}
-            for result_id in result_ids:
-                bundle = self.trace_bundle_for_result(result_id)
-                mapping[str(result_id)] = list(bundle.get('artifacts', [])) if isinstance(bundle, dict) else []
-            return mapping
         return self.read_model_repository.artifact_records_for_result_ids(result_ids)
+
+    def query_statistics(self, *, batch_id: str = '', recipe_id: str = '', decision: str = '', defect_type: str = '', qr_text: str = '', from_ts: str = '', to_ts: str = '', sample_limit: int = 120) -> dict[str, Any]:
+        """Return query-driven statistics from the canonical read model.
+
+        Args:
+            batch_id: Optional batch filter.
+            recipe_id: Optional recipe filter.
+            decision: Optional decision filter.
+            defect_type: Optional fuzzy defect-type filter.
+            qr_text: Optional fuzzy QR-text filter.
+            from_ts: Inclusive lower timestamp bound.
+            to_ts: Inclusive upper timestamp bound.
+            sample_limit: Maximum number of rows returned in the cycle trend sample.
+
+        Returns:
+            Aggregated statistics payload safe for direct HTTP serialization.
+
+        Raises:
+            Any repository refresh exception from ``_refresh_if_needed`` when the
+            projection must fail closed.
+
+        Boundary behavior:
+            Statistics are query-driven and projection-only. When the read model
+            is stale, callers must use the explicit repair path before retrying.
+        """
+        self._refresh_if_needed()
+        payload = self.read_model_repository.result_statistics(batch_id=batch_id, recipe_id=recipe_id, decision=decision, defect_type=defect_type, qr_text=qr_text, from_ts=from_ts, to_ts=to_ts, sample_limit=sample_limit)
+        payload['readModelStatus'] = dict(self._read_model_status)
+        return payload
 
     def batch_summary(self, *, batch_id: str) -> dict[str, Any]:
         self._refresh_if_needed()
-        if self._query_surface() == 'legacy_file_scan':
-            rows = [item for item in self._legacy_records if str(item.get('batchId', '')) == str(batch_id)]
-            total = len(rows)
-            ok_count = sum(1 for item in rows if str(item.get('decision', '')) == 'OK')
-            ng_count = sum(1 for item in rows if str(item.get('decision', '')) == 'NG')
-            recheck_count = sum(1 for item in rows if str(item.get('decision', '')) == 'RECHECK')
-            avg_cycle_ms = round(sum(float(item.get('cycleMs', 0.0) or 0.0) for item in rows) / total, 3) if total else 0.0
-            return {
-                'batchId': batch_id,
-                'total': total,
-                'ok': ok_count,
-                'ng': ng_count,
-                'recheck': recheck_count,
-                'okCount': ok_count,
-                'ngCount': ng_count,
-                'recheckCount': recheck_count,
-                'avgCycleMs': avg_cycle_ms,
-                'yieldRate': round(ok_count / total, 4) if total else 0.0,
-            }
         summary = self.read_model_repository.batch_summary(batch_id=batch_id)
         total = int(summary.get('total', 0) or 0)
         ok_count = int(summary.get('okCount', 0) or 0)

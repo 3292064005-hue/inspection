@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from inspection_utils.models import DecisionOutcome
+from inspection_utils.model_common import DecisionOutcome
+from inspection_utils.vision_common import PluginManifest
 
 
 @dataclass(slots=True)
@@ -118,3 +119,35 @@ def decide(result: Any, recipe: dict) -> tuple[str, str, int]:
 
 def decide_with_trace(result: Any, recipe: dict) -> DecisionOutcome:
     return evaluate_rule_engine(result, recipe) or legacy_decide(result, recipe)
+
+
+
+def decision_rule_manifest_catalog() -> list[dict[str, object]]:
+    """Return the authoritative decision-rule engine manifest catalog.
+
+    The canonical rule engine and the legacy fallback remain explicit runtime
+    capabilities so extension reviews can reason about promotion state without
+    reading the decision-node implementation directly.
+    """
+    manifests = (
+        PluginManifest(
+            kind='decision_rule_engine',
+            name='priority_rule_engine',
+            runtime_truth='real',
+            source='builtin',
+            owner_plane='inspection_decision',
+            capabilities=('RULE_ENGINE', 'TRACEABLE_DECISION'),
+            verification_requirements=('capture_process_decision_cycle', 'sort_execution_roundtrip'),
+        ),
+        PluginManifest(
+            kind='decision_rule_engine',
+            name='legacy_decide_fallback',
+            runtime_truth='real',
+            source='builtin',
+            owner_plane='inspection_decision',
+            capabilities=('RULE_ENGINE_FALLBACK',),
+            verification_requirements=('capture_process_decision_cycle',),
+            promotion_path=('internal', 'production_ready'),
+        ),
+    )
+    return [manifest.to_dict() for manifest in manifests]

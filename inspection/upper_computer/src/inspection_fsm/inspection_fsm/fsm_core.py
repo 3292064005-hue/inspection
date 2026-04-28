@@ -60,7 +60,8 @@ class StationEvent(str, Enum):
 class FSMData:
     phase: StationPhase = StationPhase.BOOT
     item_id: int = 0
-    batch_id: str = 'BATCH_DEMO'
+    batch_id: str = ''
+    recipe_id: str = ''
     cycle_index: int = 0
     last_reason: str = ''
     trace_id: str = ''

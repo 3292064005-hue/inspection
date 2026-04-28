@@ -4,6 +4,41 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from .action_contract import ACTION_CONTRACTS
 from .ros_action_bridge import _load_action_type
+
+
+def _parse_result_payload(result: Any) -> dict[str, Any]:
+    """Decode the full terminal ROS action result payload.
+
+    Args:
+        result: Generated ROS action result message instance.
+
+    Returns:
+        Canonical mapping-shaped result payload reconstructed from ``result_json``
+        plus compatibility convenience fields such as ``exportUrl``.
+
+    Raises:
+        No caller-visible exception is raised. Malformed or missing JSON falls
+        back to an empty mapping so the adapter can still report terminal state.
+
+    Boundary behavior:
+        The adapter preserves the full business result payload for native-first
+        transports instead of truncating terminal data to ``accepted/message``.
+    """
+    payload: dict[str, Any] = {}
+    result_json = str(getattr(result, 'result_json', '') or '')
+    if result_json:
+        try:
+            decoded = json.loads(result_json)
+            if isinstance(decoded, dict):
+                payload = dict(decoded)
+        except Exception:
+            payload = {}
+    export_url = str(getattr(result, 'export_url', '') or '')
+    if export_url and not str(payload.get('exportUrl', payload.get('export_url', ''))).strip():
+        payload['exportUrl'] = export_url
+    payload.setdefault('accepted', bool(getattr(result, 'accepted', False)))
+    payload.setdefault('message', str(getattr(result, 'message', '') or ''))
+    return payload
 @dataclass(slots=True)
 class NativeActionClientMetrics:
     submitted: int = 0
@@ -24,14 +59,48 @@ def native_action_client_availability() -> dict[str, object]:
             actions.append({'kind': kind, 'topic': contract.topic, 'type': contract.ros_type})
     return {'enabled': bool(actions), 'reason': '' if actions else 'generated_action_types_unavailable', 'actions': actions}
 def _apply_payload_to_goal(kind: str, payload: dict[str, Any], goal: Any) -> None:
+    """Populate one ROS action goal message from a canonical gateway payload.
+
+    Args:
+        kind: Canonical action kind from the action registry.
+        payload: Canonical JSON payload stored on the action job record.
+        goal: Mutable ROS action goal message instance.
+
+    Returns:
+        None. The goal object is mutated in place.
+
+    Raises:
+        No action-specific exception is raised here. Missing fields are left at
+        their zero values so upstream payload validation remains the single
+        source of truth.
+
+    Boundary behavior:
+        The mapper covers every native-first action contract published through
+        the registry. Compatibility-only/default goal fields remain optional.
+    """
     normalized = str(kind or '').strip().lower()
-    if normalized == 'start_batch': goal.batch_id = str(payload.get('batchId', '')); goal.recipe_id = str(payload.get('recipeId', ''))
-    elif normalized == 'reset_station': goal.reason = str(payload.get('reason', ''))
-    elif normalized == 'run_calibration': goal.calibration_profile = str(payload.get('profile', payload.get('profileName', 'default')))
-    elif normalized == 'execute_replay': goal.trace_id = str(payload.get('traceId', ''))
-    elif normalized == 'export_batch': goal.batch_id = str(payload.get('batchId', ''))
-    elif normalized == 'run_benchmark': goal.profile_name = str(payload.get('profileName', 'default'))
-    else: goal.recipe_id = str(payload.get('recipeId', '')); goal.validate_only = bool(payload.get('dryRun', False))
+    if normalized == 'start_batch':
+        goal.batch_id = str(payload.get('batchId', ''))
+        goal.recipe_id = str(payload.get('recipeId', ''))
+    elif normalized == 'reset_station':
+        goal.reason = str(payload.get('reason', ''))
+    elif normalized == 'execute_replay':
+        goal.trace_id = str(payload.get('traceId', ''))
+    elif normalized == 'export_batch':
+        goal.batch_id = str(payload.get('batchId', ''))
+    elif normalized == 'run_benchmark':
+        goal.profile_name = str(payload.get('profileName', 'default'))
+    elif normalized == 'switch_recipe_with_validation':
+        goal.recipe_id = str(payload.get('recipeId', ''))
+        goal.validate_only = bool(payload.get('dryRun', False))
+    elif normalized == 'stop_station':
+        goal.reason = str(payload.get('reason', ''))
+    elif normalized == 'set_maintenance_mode':
+        goal.enabled = bool(payload.get('enabled', False))
+    elif normalized == 'create_batch':
+        goal.requested_by = str(payload.get('requestedBy', payload.get('requested_by', '')) or '')
+    elif normalized in {'diagnostic_capture_frame', 'diagnostic_test_lighting', 'diagnostic_test_sort_actuator'}:
+        goal.request_source = str(payload.get('requestSource', payload.get('request_source', '')) or '')
 class NativeActionClientAdapter:
     def __init__(self, node: Any, *, goal_timeout_sec: float = 1.5) -> None:
         self.node = node; self.goal_timeout_sec = max(0.1, float(goal_timeout_sec)); self.metrics = NativeActionClientMetrics(); self.availability = native_action_client_availability(); self._clients={}; self._updates={}; self._goal_handles={}
@@ -105,10 +174,10 @@ class NativeActionClientAdapter:
         try: wrapper = future.result(); result = getattr(wrapper, 'result', wrapper); status_code = getattr(wrapper, 'status', None)
         except Exception as exc:
             self.metrics.result_failures += 1; update(job_id, status='FAILED', message=f'native_action_result_failed:{exc}'); return
-        message = str(getattr(result, 'message', '') or ''); accepted = bool(getattr(result, 'accepted', False)); export_url = str(getattr(result, 'export_url', '') or '')
+        payload = _parse_result_payload(result)
+        message = str(payload.get('message', getattr(result, 'message', '') or '') or '')
+        accepted = bool(payload.get('accepted', getattr(result, 'accepted', False)))
         status = 'CANCELLED' if status_code == 5 or 'cancel' in message.lower() else ('COMPLETED' if accepted else 'FAILED')
-        payload={'accepted': accepted, 'message': message}
-        if export_url: payload['exportUrl']=export_url
         update(job_id, status=status, progress=100, message=message or status, result=payload)
     def snapshot(self) -> dict[str, Any]:
         return {**self.availability, 'metrics': self.metrics.to_dict()}

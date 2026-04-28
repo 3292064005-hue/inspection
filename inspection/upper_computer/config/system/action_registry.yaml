@@ -1,0 +1,346 @@
+actions:
+  start_batch:
+    ros_type: StartBatch
+    topic: /inspection/actions/start_batch
+    api_path: /api/v1/actions/start-batch
+    operation_id: submitStartBatchAction
+    required_payload:
+    - recipeId
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 正式批次启动链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      requiredVerification:
+      - sim_closed_loop
+      - full_hardware_closed_loop
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  reset_station:
+    ros_type: ResetStation
+    topic: /inspection/actions/reset_station
+    api_path: /api/v1/actions/reset-station
+    operation_id: submitResetStationAction
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 正式复位与恢复链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      requiredVerification:
+      - upper_computer_with_stm32
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  execute_replay:
+    ros_type: ExecuteReplay
+    topic: /inspection/actions/execute_replay
+    api_path: /api/v1/actions/execute-replay
+    operation_id: submitExecuteReplayAction
+    required_payload:
+    - traceId
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 回放与对比分析链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  export_batch:
+    ros_type: ExportBatch
+    topic: /inspection/actions/export_batch
+    api_path: /api/v1/actions/export-batch
+    operation_id: submitExportBatchAction
+    required_payload:
+    - batchId
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 批次导出链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  run_benchmark:
+    ros_type: RunBenchmark
+    topic: /inspection/actions/run_benchmark
+    required_payload: []
+    api_path: /api/internal/actions/run-benchmark
+    operation_id: submitRunBenchmarkAction
+    capability:
+      availability: internal_tooling
+      visibility: hidden
+      execution_policy: allowed
+      runtime_truth: synthetic
+      summary: 内部合成基准动作，仅用于性能回归与 QA，不计入生产业务指标。
+      public_catalog: false
+      generated_client: false
+      delivery_class: qa_tooling
+      internal_client: true
+      api_surface: internal_experimental
+    governance:
+      tier: qa_tooling
+      lifecycle: internal
+      ui_label: 内部合成
+      promotion_criteria:
+      - 若需公开为生产动作，必须接入真实负载、真实验收指标与生产指标隔离报告。
+      documentation_refs:
+      - upper_computer/docs/ARCHITECTURE.md
+  switch_recipe_with_validation:
+    ros_type: SwitchRecipeWithValidation
+    topic: /inspection/actions/switch_recipe
+    api_path: /api/v1/actions/switch-recipe
+    operation_id: submitSwitchRecipeAction
+    required_payload:
+    - recipeId
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 配方校验与激活链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      requiredVerification:
+      - sim_closed_loop
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  stop_station:
+    ros_type: StopStation
+    topic: /inspection/actions/stop_station
+    api_path: /api/v1/actions/stop-station
+    operation_id: submitStopStationAction
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 正式停线控制链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  set_maintenance_mode:
+    ros_type: SetMaintenanceMode
+    topic: /inspection/actions/set_maintenance_mode
+    api_path: /api/v1/actions/set-maintenance-mode
+    operation_id: submitMaintenanceModeAction
+    required_payload:
+    - enabled
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 维护模式切换链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      requiredVerification:
+      - maintenance_mode_gate
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  create_batch:
+    ros_type: CreateBatch
+    topic: /inspection/actions/create_batch
+    api_path: /api/v1/actions/create-batch
+    operation_id: submitCreateBatchAction
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 批次创建链路。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  diagnostic_capture_frame:
+    ros_type: DiagnosticCaptureFrame
+    topic: /inspection/actions/diagnostics/capture_frame
+    api_path: /api/v1/actions/diagnostics/capture-frame
+    operation_id: submitDiagnosticCaptureFrameAction
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 维护态抓图诊断动作，复用正式诊断服务。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      sunsetRelease: ''
+      promotionCriteria: []
+      requiredVerification:
+      - maintenance_mode_gate
+      - diagnostic_capture_frame
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  diagnostic_test_lighting:
+    ros_type: DiagnosticTestLighting
+    topic: /inspection/actions/diagnostics/test_lighting
+    api_path: /api/v1/actions/diagnostics/test-lighting
+    operation_id: submitDiagnosticTestLightingAction
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 维护态补光测试动作，复用正式诊断服务。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      sunsetRelease: ''
+      promotionCriteria: []
+      requiredVerification:
+      - maintenance_mode_gate
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+  diagnostic_test_sort_actuator:
+    ros_type: DiagnosticTestSortActuator
+    topic: /inspection/actions/diagnostics/test_sort_actuator
+    api_path: /api/v1/actions/diagnostics/test-sort-actuator
+    operation_id: submitDiagnosticTestSortActuatorAction
+    capability:
+      availability: production_ready
+      visibility: visible
+      execution_policy: allowed
+      runtime_truth: real
+      summary: 维护态分拣执行器测试动作，复用正式诊断服务。
+      public_catalog: true
+      generated_client: true
+      delivery_class: official
+    governance:
+      tier: official
+      lifecycle: ga
+      sunsetRelease: ''
+      promotionCriteria: []
+      requiredVerification:
+      - maintenance_mode_gate
+      documentationRefs:
+      - upper_computer/docs/ARCHITECTURE.md
+      uiLabel: 正式
+compatibility_routes: {}
+station_capability_profiles:
+  stm32_station_default:
+    adapter_name: serial
+    protocol_version: v1
+    station_config_path: config/station/station_stm32.yaml
+    supported_action_codes:
+    - 1
+    - 2
+    - 3
+    firmware_capability_expectation:
+      features:
+      - SORT_ACK
+      - HEARTBEAT
+      - RESET_ACK
+      - CAPABILITY_QUERY
+      supported_action_codes:
+      - 1
+      - 2
+      - 3
+    firmware_routes:
+    - action_code_macro: INSPECTION_ACTION_CODE_SORT_OK
+      action_code: 1
+      logical_name: sort_ok
+      gpio_port_macro: INSPECTION_SORT_OK_GPIO
+      gpio_pin_macro: INSPECTION_SORT_OK_PIN
+    - action_code_macro: INSPECTION_ACTION_CODE_SORT_NG
+      action_code: 2
+      logical_name: sort_ng
+      gpio_port_macro: INSPECTION_SORT_NG_GPIO
+      gpio_pin_macro: INSPECTION_SORT_NG_PIN
+    - action_code_macro: INSPECTION_ACTION_CODE_SORT_RECHECK
+      action_code: 3
+      logical_name: sort_recheck
+      gpio_port_macro: INSPECTION_SORT_RECHECK_GPIO
+      gpio_pin_macro: INSPECTION_SORT_RECHECK_PIN
+  simulation_station_default:
+    adapter_name: mock
+    protocol_version: v1
+    station_config_path: config/station/station.yaml
+    supported_action_codes:
+    - 1
+    - 2
+    - 3
+    firmware_capability_expectation:
+      features:
+      - SORT_ACK
+      - HEARTBEAT
+      - RESET_ACK
+      - CAPABILITY_QUERY
+      - SYNTHETIC_RUNTIME
+      supported_action_codes:
+      - 1
+      - 2
+      - 3
+    firmware_routes: []
+station_adapter_manifests:
+  serial:
+    capability_profile: stm32_station_default
+    extra_capabilities:
+    - SERIAL_LINK
+    runtime_truth: real
+    source: builtin
+  mock:
+    capability_profile: simulation_station_default
+    extra_capabilities: []
+    runtime_truth: synthetic
+    source: builtin

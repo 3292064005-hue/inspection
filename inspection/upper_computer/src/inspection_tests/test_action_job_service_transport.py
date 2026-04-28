@@ -118,11 +118,18 @@ class _NativeMissingNode:
 
 def test_action_job_service_audits_executor_transport_errors(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv('INSPECTION_ACTION_EXECUTOR_ENABLED', 'true')
+    monkeypatch.delenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', raising=False)
     context = _Context(tmp_path)
     context._node = _FailingNode()
     service = ActionJobService(context)
-    job = service.submit('export_batch', payload={'batchId': 'B-3'}, actor={'username': 'operator', 'role': 'operator'})
-    assert job['transport'] == 'local_runtime'
+    try:
+        service.submit('export_batch', payload={'batchId': 'B-3'}, actor={'username': 'operator', 'role': 'operator'})
+    except RuntimeError as exc:
+        assert '统一动作执行链路当前不可用' in str(exc)
+    else:
+        raise AssertionError('submit should fail closed when no canonical transport is available')
+    failed_jobs, _total = context.metadata_repository.list_action_jobs(limit=10, offset=0)
+    assert failed_jobs and failed_jobs[0]['status'] == 'FAILED'
     assert any(audit.get('action') == 'ACTION_JOB_TRANSPORT_ERROR' for audit in context.audits)
     detail = next(audit['details'] for audit in context.audits if audit.get('action') == 'ACTION_JOB_TRANSPORT_ERROR')
     assert detail['transport'] == 'executor_bridge'
@@ -131,29 +138,36 @@ def test_action_job_service_audits_executor_transport_errors(monkeypatch, tmp_pa
 
 def test_action_job_service_audits_missing_native_action_transport(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv('INSPECTION_NATIVE_ACTION_CLIENT_ENABLED', 'true')
+    monkeypatch.delenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', raising=False)
     context = _Context(tmp_path)
     context._node = _NativeMissingNode()
     service = ActionJobService(context)
-    job = service.submit('export_batch', payload={'batchId': 'B-4'}, actor={'username': 'operator', 'role': 'operator'})
-    assert job['transport'] == 'local_runtime'
+    try:
+        service.submit('export_batch', payload={'batchId': 'B-4'}, actor={'username': 'operator', 'role': 'operator'})
+    except RuntimeError as exc:
+        assert '统一动作执行链路当前不可用' in str(exc)
+    else:
+        raise AssertionError('submit should fail closed when native action transport is unavailable')
     detail = next(audit['details'] for audit in context.audits if audit.get('action') == 'ACTION_JOB_TRANSPORT_ERROR')
     assert detail['transport'] == 'native_action'
     assert detail['reason'] == 'submit_native_action_goal_missing'
 
 
 
-def test_action_job_service_rejects_disabled_calibration_submit(tmp_path: Path) -> None:
+def test_action_job_service_rejects_removed_calibration_submit(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     context = _Context(tmp_path)
     service = ActionJobService(context)
     try:
         service.submit('run_calibration', payload={'profile': 'main'}, actor={'username': 'maintainer', 'role': 'maintainer'})
-    except PermissionError as exc:
-        assert '标定闭环尚未落地' in str(exc)
+    except ValueError as exc:
+        assert 'unsupported_action_kind:run_calibration' in str(exc)
     else:  # pragma: no cover - regression guard
-        raise AssertionError('run_calibration submit should be blocked')
+        raise AssertionError('run_calibration submit should be rejected because the action was removed')
 
 
-def test_action_job_service_catalog_payload_contains_capability(tmp_path: Path) -> None:
+def test_action_job_service_catalog_payload_contains_capability(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
     context = _Context(tmp_path)
     service = ActionJobService(context)
     job = service.submit('export_batch', payload={'batchId': 'B-5'}, actor={'username': 'operator', 'role': 'operator'})

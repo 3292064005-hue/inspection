@@ -1,0 +1,55 @@
+profiles:
+  stm32_station_default:
+    adapter_name: serial
+    protocol_version: v1
+    station_config_path: config/station/station_stm32.yaml
+    supported_action_codes:
+    - 1
+    - 2
+    - 3
+    firmware_capability_expectation:
+      features:
+      - SORT_ACK
+      - HEARTBEAT
+      - RESET_ACK
+      - CAPABILITY_QUERY
+      supported_action_codes:
+      - 1
+      - 2
+      - 3
+    firmware_routes:
+    - action_code_macro: INSPECTION_ACTION_CODE_SORT_OK
+      action_code: 1
+      logical_name: sort_ok
+      gpio_port_macro: INSPECTION_SORT_OK_GPIO
+      gpio_pin_macro: INSPECTION_SORT_OK_PIN
+    - action_code_macro: INSPECTION_ACTION_CODE_SORT_NG
+      action_code: 2
+      logical_name: sort_ng
+      gpio_port_macro: INSPECTION_SORT_NG_GPIO
+      gpio_pin_macro: INSPECTION_SORT_NG_PIN
+    - action_code_macro: INSPECTION_ACTION_CODE_SORT_RECHECK
+      action_code: 3
+      logical_name: sort_recheck
+      gpio_port_macro: INSPECTION_SORT_RECHECK_GPIO
+      gpio_pin_macro: INSPECTION_SORT_RECHECK_PIN
+  simulation_station_default:
+    adapter_name: mock
+    protocol_version: v1
+    station_config_path: config/station/station.yaml
+    supported_action_codes:
+    - 1
+    - 2
+    - 3
+    firmware_capability_expectation:
+      features:
+      - SORT_ACK
+      - HEARTBEAT
+      - RESET_ACK
+      - CAPABILITY_QUERY
+      - SYNTHETIC_RUNTIME
+      supported_action_codes:
+      - 1
+      - 2
+      - 3
+    firmware_routes: []

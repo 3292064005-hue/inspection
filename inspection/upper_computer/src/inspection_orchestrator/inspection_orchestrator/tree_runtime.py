@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from inspection_utils.paths import resolve_resource_path
+from inspection_utils.io_common import resolve_resource_path
 
 from .bt import BTResult, build_node_from_spec, context_get, load_tree_catalog, register_action_builder
 

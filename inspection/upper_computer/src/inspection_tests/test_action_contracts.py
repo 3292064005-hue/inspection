@@ -1,16 +1,18 @@
-from inspection_hmi_gateway.action_contract import ActionPolicyError, action_catalog, ensure_action_submit_allowed, validate_action_payload
+from inspection_hmi_gateway.action_contract import action_catalog, ensure_action_submit_allowed, public_action_capability_matrix, validate_action_payload
 
 
 def test_action_catalog_exposes_topics_types_and_capabilities() -> None:
     catalog = action_catalog()
     start_batch = next(item for item in catalog if item['kind'] == 'start_batch')
-    calibration = next(item for item in catalog if item['kind'] == 'run_calibration')
     benchmark = next(item for item in catalog if item['kind'] == 'run_benchmark')
+    kinds = {item['kind'] for item in catalog}
     assert start_batch['topic'] == '/inspection/actions/start_batch'
     assert start_batch['capability']['availability'] == 'production_ready'
-    assert calibration['capability']['submitEnabled'] is False
-    assert calibration['capability']['submitReason'] == 'calibration_workflow_not_available'
-    assert benchmark['capability']['availability'] == 'synthetic'
+    assert 'run_calibration' not in kinds
+    assert benchmark['capability']['availability'] == 'internal_tooling'
+    assert benchmark['capability']['generatedClient'] is False
+    assert benchmark['capability']['publicCatalog'] is False
+    assert benchmark['governance']['tier'] == 'qa_tooling'
 
 
 def test_action_payload_validation_uses_contract_requirements() -> None:
@@ -18,27 +20,20 @@ def test_action_payload_validation_uses_contract_requirements() -> None:
     assert validate_action_payload('export_batch', {'batchId': 'B1'}) == ''
 
 
-def test_action_submission_policy_rejects_disabled_calibration() -> None:
+def test_action_submission_policy_rejects_removed_calibration_action() -> None:
     try:
         ensure_action_submit_allowed('run_calibration')
-    except ActionPolicyError as exc:
-        assert exc.reason == 'calibration_workflow_not_available'
+    except KeyError:
+        return
     else:  # pragma: no cover - regression guard
-        raise AssertionError('run_calibration should be blocked by policy')
+        raise AssertionError('run_calibration should be absent from the runtime action surface')
 
 
-def test_benchmark_submission_policy_requires_explicit_environment_gate(monkeypatch) -> None:
-    monkeypatch.delenv('INSPECTION_EXPERIMENTAL_ACTIONS_ENABLED', raising=False)
-    try:
-        ensure_action_submit_allowed('run_benchmark')
-    except ActionPolicyError as exc:
-        assert exc.reason == 'benchmark_requires_experimental_actions'
-    else:  # pragma: no cover - regression guard
-        raise AssertionError('run_benchmark should be blocked without env gate')
-
-    monkeypatch.setenv('INSPECTION_EXPERIMENTAL_ACTIONS_ENABLED', '1')
+def test_benchmark_submission_policy_is_internal_tooling_and_allowed() -> None:
     contract = ensure_action_submit_allowed('run_benchmark')
     assert contract.kind == 'run_benchmark'
+    assert contract.capability.availability == 'internal_tooling'
+    assert contract.capability.public_catalog is False
 
 
 class _Runtime:
@@ -77,3 +72,21 @@ def test_action_catalog_can_hide_non_production_actions_from_default_public_disc
     assert 'start_batch' in kinds
     assert 'run_calibration' not in kinds
     assert 'run_benchmark' not in kinds
+
+
+def test_action_payload_validation_accepts_boolean_required_fields() -> None:
+    assert validate_action_payload('set_maintenance_mode', {'enabled': False}) == ''
+
+
+def test_action_catalog_includes_promoted_native_first_actions() -> None:
+    catalog = {item['kind']: item for item in action_catalog()}
+    assert catalog['stop_station']['type'] == 'StopStation'
+    assert catalog['set_maintenance_mode']['type'] == 'SetMaintenanceMode'
+    assert catalog['create_batch']['type'] == 'CreateBatch'
+
+
+def test_public_action_capability_matrix_includes_promoted_public_actions() -> None:
+    matrix = public_action_capability_matrix()
+    assert 'run_calibration' not in matrix
+    assert 'run_benchmark' not in matrix
+    assert matrix['start_batch']['availability'] == 'production_ready'

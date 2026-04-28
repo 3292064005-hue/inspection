@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from inspection_utils.image_tools import save_image
+from inspection_utils.vision_common import save_image
 
 
 @dataclass(slots=True)

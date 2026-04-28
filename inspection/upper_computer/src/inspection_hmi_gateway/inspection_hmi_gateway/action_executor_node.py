@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import uuid
 from typing import Any
@@ -14,15 +15,15 @@ except ImportError:  # pragma: no cover - ROS interface generation unavailable i
     ActionExecutorEvent = ControlCommand = None
 
 from inspection_interfaces.srv import ResetFault, StartInspection
-from inspection_utils.control_protocol import normalize_control_command
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.param_parsing import parameter_as_bool
-from inspection_utils.paths import resolve_resource_path, resolve_runtime_path
-from inspection_utils.qos import qos_profile
-from inspection_utils.runtime_node import InspectionRuntimeNode
-from inspection_utils.transport_adapters import legacy_payload_json_from_typed_message, publish_dual_control
-from inspection_utils.typed_interfaces import assert_typed_interfaces_available
-from inspection_utils.transport_contracts import ACTION_EXECUTOR_EVENT_TOPIC_TYPED, CONTROL_TOPIC_TYPED, action_executor_event_payload
+from inspection_utils.transport_common import normalize_control_command
+from inspection_utils.runtime_common import ManagedNodeMixin
+from inspection_utils.config_common import parameter_as_bool
+from inspection_utils.io_common import resolve_resource_path, resolve_runtime_path
+from inspection_utils.runtime_common import qos_profile
+from inspection_utils.runtime_common import InspectionRuntimeNode
+from inspection_utils.transport_common import legacy_payload_json_from_typed_message, publish_dual_control
+from inspection_utils.runtime_common import assert_typed_interfaces_available
+from inspection_utils.transport_common import ACTION_EXECUTOR_EVENT_TOPIC_TYPED, CONTROL_TOPIC_TYPED, action_executor_event_payload
 
 from .action_contract import EXECUTOR_CANCEL_TOPIC, EXECUTOR_EVENT_TOPIC, EXECUTOR_SUBMIT_TOPIC, ActionPolicyError, ensure_action_submit_allowed
 from .action_execution_runtime import ActionExecutionRuntime
@@ -167,8 +168,10 @@ class ActionExecutorNode(ManagedNodeMixin, InspectionRuntimeNode):
             timeout_message='故障复位请求超时。',
         )
         if not result.ok and result.message == '未找到 /inspection/reset_fault 服务。':
+            if str(os.environ.get('INSPECTION_RESET_TOPIC_FALLBACK_ENABLED', '')).strip().lower() not in {'1', 'true', 'yes', 'on'}:
+                return False, '未找到 /inspection/reset_fault 服务，且未启用控制话题复位回退。'
             self.publish_control('reset')
-            return True, '已退回控制话题复位。'
+            return True, '已通过控制话题执行回退复位。'
         return self._handle_service_result(result)
 
     def _next_job_id(self, kind: str) -> str:
@@ -300,7 +303,7 @@ class ActionExecutorNode(ManagedNodeMixin, InspectionRuntimeNode):
             typed.status = str(typed_payload.get('status', ''))
             typed.source = str(typed_payload.get('source', 'inspection_action_executor_node'))
             typed.schema_version = str(typed_payload.get('schema_version', 'v1') or 'v1')
-            typed.payload_json = legacy_payload_json_from_typed_message(typed, default_event_type='action_executor_event', fallback=payload)
+            typed.payload_json = legacy_payload_json_from_typed_message(typed, default_event_type='action_executor_event', fallback=payload, bridge_name='action_executor_event')
             self.typed_events_pub.publish(typed)
 
     def _publish_update(self, job_id: str, **fields: Any) -> None:

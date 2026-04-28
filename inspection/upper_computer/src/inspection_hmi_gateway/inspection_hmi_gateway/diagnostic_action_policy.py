@@ -11,8 +11,8 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 
-from inspection_utils.config import load_yaml
-from inspection_utils.paths import resolve_resource_path
+from inspection_utils.config_common import load_yaml
+from inspection_utils.io_common import resolve_resource_path
 
 DEFAULT_POLICY_PATH = 'config/system/diagnostic_actions.yaml'
 DEFAULT_DIAGNOSTIC_KINDS = (

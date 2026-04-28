@@ -1,0 +1,66 @@
+{
+  "scenarioId": "upper_computer_with_stm32",
+  "tier": "P0",
+  "executedAt": "REPLACE_WITH_UTC_TIMESTAMP",
+  "operator": "REPLACE_WITH_OPERATOR",
+  "gitCommit": "REPLACE_WITH_GIT_COMMIT",
+  "trigger": "ros2 launch inspection_bringup real_station.launch.py sim_mode:=false station_config_path:=config/station/station_stm32.yaml action_executor_enabled:=true",
+  "environment": {
+    "host": "REPLACE_WITH_HOST",
+    "upperComputer": true,
+    "stm32": true,
+    "esp32s3": false
+  },
+  "expectedChecks": [
+    {
+      "name": "serial_handshake_capabilities",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "supported_action_code_reject",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "feed_sort_reset_roundtrip",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "heartbeat_observed",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    },
+    {
+      "name": "fault_reset_recovery",
+      "passed": false,
+      "evidence": "REPLACE_WITH_EVIDENCE"
+    }
+  ],
+  "failureCriteria": [
+    {
+      "name": "station_protocol_contract_fault",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    },
+    {
+      "name": "handshake_not_completed",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    },
+    {
+      "name": "heartbeat_timeout",
+      "observed": false,
+      "details": "REPLACE_WITH_DETAILS"
+    }
+  ],
+  "artifacts": {
+    "logs": [],
+    "screenshots": [],
+    "videos": [],
+    "reports": []
+  },
+  "notes": "REPLACE_WITH_EXECUTION_SUMMARY",
+  "passed": false
+}

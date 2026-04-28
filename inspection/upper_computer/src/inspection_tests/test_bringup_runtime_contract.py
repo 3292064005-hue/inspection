@@ -8,19 +8,18 @@ def test_bringup_launch_exposes_managed_runtime_args() -> None:
     assert 'managed_runtime_autostart' in text
 
 
-def test_full_stack_launch_forwards_managed_runtime_args() -> None:
+def test_sim_stack_launch_forwards_managed_runtime_args() -> None:
     root = Path(__file__).resolve().parents[2]
-    wrapper = (root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py').read_text(encoding='utf-8')
+    wrapper = (root / 'src' / 'inspection_bringup' / 'launch' / 'sim_stack.launch.py').read_text(encoding='utf-8')
     helper = (root / 'src' / 'inspection_bringup' / 'inspection_bringup' / 'sim_stack_common.py').read_text(encoding='utf-8')
     assert 'build_simulated_stack' in wrapper
     assert 'managed_runtime_enabled' in helper
     assert 'managed_runtime_autostart' in helper
 
 
-
-def test_full_stack_launch_starts_action_executor_node() -> None:
+def test_sim_stack_launch_starts_action_executor_node() -> None:
     root = Path(__file__).resolve().parents[2]
-    wrapper = (root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py').read_text(encoding='utf-8')
+    wrapper = (root / 'src' / 'inspection_bringup' / 'launch' / 'sim_stack.launch.py').read_text(encoding='utf-8')
     helper = (root / 'src' / 'inspection_bringup' / 'inspection_bringup' / 'sim_stack_common.py').read_text(encoding='utf-8')
     assert 'build_simulated_stack' in wrapper
     assert 'INSPECTION_ACTION_EXECUTOR_ENABLED' in helper
@@ -77,11 +76,14 @@ def test_real_station_launch_uses_canonical_control_plane_node_names() -> None:
 
 def test_launches_use_absolute_resource_defaults_and_runtime_log_root() -> None:
     root = Path(__file__).resolve().parents[2]
-    full_stack = (root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py').read_text(encoding='utf-8')
+    sim_stack = (root / 'src' / 'inspection_bringup' / 'launch' / 'sim_stack.launch.py').read_text(encoding='utf-8')
+    sim_helper = (root / 'src' / 'inspection_bringup' / 'inspection_bringup' / 'sim_stack_common.py').read_text(encoding='utf-8')
     gateway = (root / 'src' / 'inspection_hmi_gateway' / 'launch' / 'hmi_gateway.launch.py').read_text(encoding='utf-8')
-    assert 'log_root' in full_stack
+    assert 'build_simulated_stack' in sim_stack
+    assert 'log_root' in sim_helper
     assert 'get_package_share_directory' in gateway
     assert 'log_root' in gateway
+    assert not (root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py').exists()
 
 
 def test_launch_runtime_validation_uses_discovered_launch_matrix() -> None:
@@ -99,8 +101,10 @@ def test_sim_stack_launch_exists_as_canonical_demo_entrypoint() -> None:
     helper = (root / 'src' / 'inspection_bringup' / 'inspection_bringup' / 'sim_stack_common.py').read_text(encoding='utf-8')
     assert 'build_simulated_stack' in wrapper
     assert "sim_mode': 'true'" in helper
+    assert "DeclareLaunchArgument('require_frontend_dist', default_value='false')" in helper
     assert 'INSPECTION_HMI_REQUIRE_FRONTEND_DIST' in helper
     assert "DeclareLaunchArgument('profile_name', default_value='simulation')" in helper
+
 
 def test_real_station_launch_materializes_effective_runtime_payload() -> None:
     root = Path(__file__).resolve().parents[2]
@@ -116,24 +120,3 @@ def test_runtime_launch_payload_forwards_esp32_auth_settings() -> None:
     text = (root / 'src' / 'inspection_bringup' / 'inspection_bringup' / 'runtime_launch_config.py').read_text(encoding='utf-8')
     assert "'esp32_auth_header'" in text
     assert "'esp32_auth_token'" in text
-
-
-def test_real_station_launch_defaults_to_real_hardware_configs() -> None:
-    root = Path(__file__).resolve().parents[2]
-    text = (root / 'src' / 'inspection_bringup' / 'launch' / 'real_station.launch.py').read_text(encoding='utf-8')
-    assert "DeclareLaunchArgument('sim_mode', default_value='false')" in text
-    assert 'station_stm32.yaml' in text
-    assert 'camera_esp32s3.yaml' in text
-    assert '_REAL_ENTRY_SIM_WARNING' in text
-    assert 'resolved simulated config(s) in real mode' in text
-
-
-def test_real_station_launch_starts_fullstack_gateway_and_executor_by_default() -> None:
-    root = Path(__file__).resolve().parents[2]
-    text = (root / 'src' / 'inspection_bringup' / 'launch' / 'real_station.launch.py').read_text(encoding='utf-8')
-    assert "DeclareLaunchArgument('enable_gateway', default_value='true')" in text
-    assert "DeclareLaunchArgument('action_executor_enabled', default_value='true')" in text
-    assert 'inspection_hmi_gateway_server' in text
-    assert 'inspection_action_executor_node' in text
-    assert 'INSPECTION_ACTION_EXECUTOR_ENABLED' in text
-    assert 'station_protocol_version' in text

@@ -5,19 +5,28 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 try:
-    from inspection_interfaces.msg import DiagnosticsSnapshot
+    from inspection_interfaces.msg import (
+        BridgeHandshakeCompleteEvent,
+        BridgeHeartbeatEvent,
+        DecisionPublishedEvent,
+        DiagnosticsSnapshot,
+        FaultRaisedEvent,
+        FsmTransitionEvent,
+        StationState,
+        VisionFrameAcquiredEvent,
+    )
 except ImportError:  # pragma: no cover - ROS interface generation unavailable in unit-test environments
-    DiagnosticsSnapshot = None
-
-from inspection_interfaces.msg import StationState
-from inspection_utils.logging_tools import event_to_json, safe_json_loads
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.runtime_node import InspectionRuntimeNode
-from inspection_utils.transport_contracts import DIAGNOSTICS_TOPIC_TYPED, diagnostics_payload
-from inspection_utils.typed_interfaces import assert_typed_interfaces_available
-from inspection_utils.lifecycle_matrix import lifecycle_governance_matrix
-from inspection_utils.qos import qos_policy_matrix, qos_profile, qos_summary
-from inspection_utils.param_parsing import parameter_as_bool
+    BridgeHandshakeCompleteEvent = BridgeHeartbeatEvent = DecisionPublishedEvent = DiagnosticsSnapshot = FaultRaisedEvent = FsmTransitionEvent = VisionFrameAcquiredEvent = None
+    from inspection_interfaces.msg import StationState
+from inspection_utils.logging_common import event_to_json, safe_json_loads
+from inspection_utils.runtime_common import ManagedNodeMixin
+from inspection_utils.runtime_common import InspectionRuntimeNode
+from inspection_utils.transport_common import DIAGNOSTICS_TOPIC_TYPED, diagnostics_payload
+from inspection_utils.runtime_common import assert_typed_interfaces_available
+from inspection_utils.runtime_event_contracts import BRIDGE_HANDSHAKE_COMPLETE_TOPIC_TYPED, BRIDGE_HEARTBEAT_TOPIC_TYPED, DECISION_PUBLISHED_TOPIC_TYPED, FAULT_RAISED_TOPIC_TYPED, FSM_TRANSITION_TOPIC_TYPED, RuntimeEventDeduper, VISION_FRAME_ACQUIRED_TOPIC_TYPED, is_runtime_event_payload, normalize_runtime_event_message
+from inspection_utils.lifecycle_common import lifecycle_governance_matrix
+from inspection_utils.runtime_common import qos_policy_matrix, qos_profile, qos_summary
+from inspection_utils.config_common import parameter_as_bool
 from .diagnostic_adapter import snapshot_to_statuses
 from .diagnostics_aggregator import DiagnosticsAggregator
 
@@ -30,11 +39,18 @@ class DiagnosticsNode(ManagedNodeMixin, InspectionRuntimeNode):
         super().__init__('inspection_diagnostics_node')
         self.declare_parameter('enable_annotated_image_diagnostics', False)
         self.aggregator = DiagnosticsAggregator()
+        self.runtime_event_deduper = RuntimeEventDeduper(max_entries=512, ttl_sec=2.0)
         self.subscription_policy = diagnostics_subscription_policy(
             parameter_as_bool(self, 'enable_annotated_image_diagnostics', default=False)
         )
         self.aggregator.set_annotated_stream_enabled(self.subscription_policy['annotated_image'])
         self.event_sub = self.create_subscription(String, '/inspection/events', self.on_event, qos_profile('event'))
+        self.typed_fsm_transition_sub = self.create_subscription(FsmTransitionEvent, FSM_TRANSITION_TOPIC_TYPED, self.on_typed_event, qos_profile('event')) if FsmTransitionEvent is not None else None
+        self.typed_vision_frame_sub = self.create_subscription(VisionFrameAcquiredEvent, VISION_FRAME_ACQUIRED_TOPIC_TYPED, self.on_typed_event, qos_profile('event')) if VisionFrameAcquiredEvent is not None else None
+        self.typed_decision_sub = self.create_subscription(DecisionPublishedEvent, DECISION_PUBLISHED_TOPIC_TYPED, self.on_typed_event, qos_profile('event')) if DecisionPublishedEvent is not None else None
+        self.typed_bridge_heartbeat_sub = self.create_subscription(BridgeHeartbeatEvent, BRIDGE_HEARTBEAT_TOPIC_TYPED, self.on_typed_event, qos_profile('event')) if BridgeHeartbeatEvent is not None else None
+        self.typed_bridge_handshake_sub = self.create_subscription(BridgeHandshakeCompleteEvent, BRIDGE_HANDSHAKE_COMPLETE_TOPIC_TYPED, self.on_typed_event, qos_profile('event')) if BridgeHandshakeCompleteEvent is not None else None
+        self.typed_fault_raised_sub = self.create_subscription(FaultRaisedEvent, FAULT_RAISED_TOPIC_TYPED, self.on_typed_event, qos_profile('event')) if FaultRaisedEvent is not None else None
         self.station_sub = self.create_subscription(StationState, '/station/state', self.on_station, qos_profile('station_state'))
         self.camera_status_sub = self.create_subscription(String, '/inspection/camera/status', self.on_camera_status, qos_profile('diagnostics'))
         self.result_raw_sub = self.create_subscription(String, '/inspection/result_raw', self.on_result_raw, qos_profile('event'))
@@ -43,7 +59,7 @@ class DiagnosticsNode(ManagedNodeMixin, InspectionRuntimeNode):
         self.typed_pub = self.create_publisher(DiagnosticsSnapshot, DIAGNOSTICS_TOPIC_TYPED, qos_profile('diagnostics')) if DiagnosticsSnapshot is not None else None
         self.status_pub = self.create_publisher(String, '/inspection/diagnostics/statuses', qos_profile('diagnostics'))
         self.timer = self.create_timer(0.5, self.publish_snapshot)
-        assert_typed_interfaces_available(consumer='inspection_diagnostics_node', symbols={'DiagnosticsSnapshot': DiagnosticsSnapshot})
+        assert_typed_interfaces_available(consumer='inspection_diagnostics_node', symbols={'BridgeHandshakeCompleteEvent': BridgeHandshakeCompleteEvent, 'BridgeHeartbeatEvent': BridgeHeartbeatEvent, 'DecisionPublishedEvent': DecisionPublishedEvent, 'DiagnosticsSnapshot': DiagnosticsSnapshot, 'FaultRaisedEvent': FaultRaisedEvent, 'FsmTransitionEvent': FsmTransitionEvent, 'VisionFrameAcquiredEvent': VisionFrameAcquiredEvent})
         self.setup_managed_runtime(node_name='inspection_diagnostics_node')
 
     def on_configure(self):
@@ -62,7 +78,18 @@ class DiagnosticsNode(ManagedNodeMixin, InspectionRuntimeNode):
         return True, 'diagnostics shutdown'
 
     def on_event(self, msg: String) -> None:
-        self.aggregator.ingest_event(safe_json_loads(msg.data))
+        payload = safe_json_loads(msg.data)
+        if is_runtime_event_payload(payload) and self.runtime_event_deduper.seen_recently(payload):
+            return
+        self.aggregator.ingest_event(payload)
+
+    def on_typed_event(self, msg: object) -> None:
+        payload = safe_json_loads(getattr(msg, 'payload_json', '') or '{}', {})
+        default_event_type = str(payload.get('type', '') or 'runtime_event')
+        normalized = normalize_runtime_event_message(msg, default_event_type=default_event_type)
+        if is_runtime_event_payload(normalized) and self.runtime_event_deduper.seen_recently(normalized):
+            return
+        self.aggregator.ingest_event(normalized)
 
     def on_station(self, msg: StationState) -> None:
         detail = safe_json_loads(msg.detail)

@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
-from inspection_utils.config import load_yaml, save_yaml
+from inspection_utils.config_common import load_yaml, save_yaml
 
 PASSWORD_HASH_PREFIX = 'pbkdf2_sha256'
 DEFAULT_PBKDF2_ITERATIONS = 240_000

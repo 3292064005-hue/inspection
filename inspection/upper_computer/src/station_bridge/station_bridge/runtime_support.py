@@ -4,7 +4,7 @@ import json
 import time
 from typing import Any
 
-from inspection_utils.logging_tools import event_to_json
+from inspection_utils.logging_common import event_to_json, safe_json_loads
 try:
     from std_msgs.msg import String
 except ImportError:  # pragma: no cover - unit-test fallback without ROS message generation
@@ -14,8 +14,10 @@ except ImportError:  # pragma: no cover - unit-test fallback without ROS message
 
 
 try:
-    from inspection_interfaces.msg import FaultEvent, StationState
+    from inspection_interfaces.msg import BridgeHandshakeCompleteEvent, BridgeHeartbeatEvent, FaultEvent, StationState
 except ImportError:  # pragma: no cover - unit-test fallback without ROS message generation
+    BridgeHandshakeCompleteEvent = BridgeHeartbeatEvent = None
+
     class FaultEvent:  # type: ignore[override]
         pass
 
@@ -24,6 +26,12 @@ except ImportError:  # pragma: no cover - unit-test fallback without ROS message
 
 from .bridge_base import BridgeSignal
 from .capability_registry import StationCapabilities
+from inspection_utils.station_common import StationProtocolContractError, validate_capabilities_payload, validate_runtime_protocol_version
+from inspection_utils.runtime_event_contracts import (
+    populate_bridge_handshake_complete_message,
+    populate_bridge_heartbeat_message,
+    publish_dual_runtime_event,
+)
 
 
 class BridgeRuntimeSupport:
@@ -59,8 +67,7 @@ class BridgeRuntimeSupport:
             return False, str(exc)
 
     def emit_event(self, event_type: str, **fields) -> None:
-        evt = String()
-        evt.data = event_to_json(
+        payload_json = event_to_json(
             event_type,
             node='station_bridge_node',
             item_id=self.node.item_id,
@@ -69,6 +76,28 @@ class BridgeRuntimeSupport:
             session=self.node.session.snapshot(),
             **fields,
         )
+        if event_type == 'bridge_heartbeat':
+            publish_dual_runtime_event(
+                event_type='bridge_heartbeat',
+                legacy_publisher=self.node.event_pub,
+                typed_publisher=getattr(self.node, 'typed_bridge_heartbeat_pub', None),
+                typed_message_cls=BridgeHeartbeatEvent,
+                populate_message=populate_bridge_heartbeat_message,
+                payload=safe_json_loads(payload_json),
+            )
+            return
+        if event_type == 'bridge_handshake_complete':
+            publish_dual_runtime_event(
+                event_type='bridge_handshake_complete',
+                legacy_publisher=self.node.event_pub,
+                typed_publisher=getattr(self.node, 'typed_bridge_handshake_pub', None),
+                typed_message_cls=BridgeHandshakeCompleteEvent,
+                populate_message=populate_bridge_handshake_complete_message,
+                payload=safe_json_loads(payload_json),
+            )
+            return
+        evt = String()
+        evt.data = payload_json
         self.node.event_pub.publish(evt)
 
     def rollover_session(self, *, reason: str) -> None:
@@ -186,18 +215,57 @@ class BridgeRuntimeSupport:
             self.publish_station('RESET_ACK', detail=detail)
             self.start_handshake()
         elif signal.state == 'HEARTBEAT':
-            self.emit_event('bridge_heartbeat', seq=signal.seq, detail=detail)
+            try:
+                normalized_heartbeat = validate_runtime_protocol_version(
+                    detail,
+                    configured_version=getattr(self.node, 'protocol_version_label', 'v1'),
+                    contract=getattr(self.node, 'protocol_contract', None),
+                    required=bool(getattr(getattr(self.node, 'protocol_contract', None), 'heartbeat_version_required', False)),
+                ) if getattr(self.node, 'protocol_contract', None) is not None else dict(detail)
+            except StationProtocolContractError as exc:
+                self.publish_fault(
+                    'FAULT_PROTOCOL_CONTRACT',
+                    {
+                        'phase': 'HEARTBEAT',
+                        'error': str(exc),
+                        'reported_detail': detail,
+                        'configured_protocol_version': getattr(self.node, 'protocol_version_label', 'v1'),
+                    },
+                )
+                return
+            self.emit_event('bridge_heartbeat', seq=signal.seq, detail=normalized_heartbeat)
         elif signal.state == 'CAPABILITIES':
             merged_detail = dict(detail)
             merged_detail.setdefault('protocol_version', getattr(self.node, 'protocol_version_label', 'v1'))
             configured_codes = sorted(int(item) for item in getattr(self.node, 'supported_action_codes', set()))
             if configured_codes:
                 merged_detail.setdefault('supported_action_codes', configured_codes)
-            self.node.capabilities = StationCapabilities.from_payload(merged_detail)
+            try:
+                validated_capabilities = validate_capabilities_payload(
+                    merged_detail,
+                    configured_version=getattr(self.node, 'protocol_version_label', 'v1'),
+                    configured_action_codes=getattr(self.node, 'supported_action_codes', set()),
+                    expected_features=getattr(self.node, 'expected_station_features', set()),
+                    contract=getattr(self.node, 'protocol_contract', None),
+                ) if getattr(self.node, 'protocol_contract', None) is not None else merged_detail
+            except StationProtocolContractError as exc:
+                self.node.handshake_done = False
+                self.publish_fault(
+                    'FAULT_PROTOCOL_CONTRACT',
+                    {
+                        'phase': 'CAPABILITIES',
+                        'error': str(exc),
+                        'reported_detail': merged_detail,
+                        'configured_protocol_version': getattr(self.node, 'protocol_version_label', 'v1'),
+                        'configured_action_codes': configured_codes,
+                    },
+                )
+                return
+            self.node.capabilities = StationCapabilities.from_payload(validated_capabilities)
             self.node.handshake_done = True
-            self.node.session.mark_ready(device_id=str(merged_detail.get('device_id', '')), capabilities=self.node.capabilities.to_dict())
+            self.node.session.mark_ready(device_id=str(validated_capabilities.get('device_id', '')), capabilities=self.node.capabilities.to_dict())
             self.emit_event('bridge_handshake_complete', capabilities=self.node.capabilities.to_dict())
-            self.publish_station('CAPABILITIES', detail=merged_detail)
+            self.publish_station('CAPABILITIES', detail=validated_capabilities)
 
     def publish_fault(self, code: str, detail: dict[str, Any] | None = None) -> None:
         fault = FaultEvent()

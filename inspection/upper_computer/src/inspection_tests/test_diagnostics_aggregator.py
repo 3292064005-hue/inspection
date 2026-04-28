@@ -21,6 +21,8 @@ def test_diagnostics_aggregator_builds_warn_and_error_levels() -> None:
     assert snap['channels']['faults']['values']['count'] == 1
     assert snap['channels']['vision_budget']['level'] == 'WARN'
     assert snap['channels']['artifact_backpressure']['level'] == 'WARN'
+    assert snap['channels']['artifact_quality']['level'] == 'OK'
+    assert snap['channels']['artifact_quality']['values']['annotatedRetentionPolicy'] == 'best_effort'
     assert snap['channels']['lifecycle_governance']['values']['matrix']
     assert snap['channels']['qos_governance']['values']['warnings']
 
@@ -31,3 +33,12 @@ def test_diagnostics_aggregator_treats_parse_failed_debug_payload_as_error() -> 
     snap = agg.build_snapshot()
     assert snap['channels']['vision_debug']['level'] == 'ERROR'
     assert snap['channels']['vision_debug']['values']['available'] is True
+
+
+def test_diagnostics_aggregator_marks_artifact_quality_degraded_when_annotated_frames_are_dropped() -> None:
+    agg = DiagnosticsAggregator()
+    agg.ingest_event({'type': 'vision_capture_done', 'processing_ms': 100.0, 'artifact_writer': {'queueUsage': 0.92, 'flushTimeouts': 0, 'failed': 0, 'droppedOverload': 3}})
+    snap = agg.build_snapshot()
+    assert snap['channels']['artifact_quality']['level'] == 'WARN'
+    assert snap['channels']['artifact_quality']['values']['degraded'] is True
+    assert snap['channels']['artifact_quality']['values']['droppedOverload'] == 3

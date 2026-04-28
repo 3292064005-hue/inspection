@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from inspection_utils.paths import resolve_resource_path
+from inspection_utils.io_common import resolve_resource_path
 from typing import Any
 
 from .auth import AuthService

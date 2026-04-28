@@ -6,15 +6,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from inspection_utils.logging_tools import safe_json_loads
-from inspection_utils.paths import resolve_runtime_path
-from inspection_utils.read_model_projection import safe_int as _safe_int
-from inspection_utils.read_model_store import ReadModelStore
+from inspection_utils.logging_common import safe_json_loads
+from inspection_utils.io_common import resolve_runtime_path
+from inspection_utils.model_common import safe_int as _safe_int
+from inspection_utils.model_common import ReadModelStore
 
 from .evidence_repository import TraceEvidenceRepository
 from .read_model_policy import READ_MODEL_QUERY_REFRESH_DISABLED, ReadModelPolicy, load_read_model_policy
 from .read_model_projection_repair import build_result_record, build_summary_map, read_jsonl_dicts, read_result_rows, rebuild_projection, refresh_trace_stream_projection
-from .read_model_result_queries import ResultQueryFilters, assemble_result_detail, fetch_result_page, load_result_projection_payload
+from .read_model_result_queries import ResultQueryFilters, assemble_result_detail, fetch_result_page, fetch_result_statistics, load_result_projection_payload
 from .read_model_replay_queries import fetch_trace_page
 from .read_model_trace_queries import build_batch_summary, fetch_artifacts_for_trace_ids, fetch_result_ids_for_batch, fetch_result_ids_for_trace_ids, fetch_trace_bundle, fetch_trace_bundles_for_batch, fetch_trace_id_for_result, fetch_trace_ids
 from .read_model_sync_coordinator import build_readiness, cached_sync_token, resolve_projection_refresh_plan
@@ -584,6 +584,12 @@ class ReadModelRepository:
         for result_id, trace_id in zip(result_ids, trace_ids):
             mapping[str(result_id)] = grouped.get(trace_id, []) if trace_id else []
         return mapping
+
+    def result_statistics(self, *, batch_id: str = '', recipe_id: str = '', decision: str = '', defect_type: str = '', qr_text: str = '', from_ts: str = '', to_ts: str = '', sample_limit: int = 120) -> dict[str, Any]:
+        self.refresh_if_needed()
+        filters = ResultQueryFilters(batch_id=batch_id, recipe_id=recipe_id, decision=decision, defect_type=defect_type, qr_text=qr_text, from_ts=from_ts, to_ts=to_ts)
+        with self.connection() as conn:
+            return fetch_result_statistics(conn, filters, sample_limit=sample_limit)
 
     def batch_summary(self, *, batch_id: str) -> dict[str, Any]:
         self.refresh_if_needed()

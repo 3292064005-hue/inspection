@@ -1,3 +1,4 @@
+import json
 import asyncio
 
 from inspection_hmi_gateway.ros_action_bridge import (
@@ -40,6 +41,7 @@ class _ActionType:
             self.accepted = False
             self.message = ''
             self.export_url = ''
+            self.result_json = ''
 
     class Feedback:
         def __init__(self):
@@ -153,7 +155,7 @@ def test_ros_action_bridge_aborts_when_provider_rejects_policy(monkeypatch):
     import asyncio
     import inspection_hmi_gateway.ros_action_bridge as module
 
-    monkeypatch.setattr(module, 'native_action_availability', lambda: {'enabled': True, 'actions': [{'kind': 'run_calibration', 'topic': '/inspection/actions/run_calibration', 'type': 'RunCalibration'}]})
+    monkeypatch.setattr(module, 'native_action_availability', lambda: {'enabled': True, 'actions': [{'kind': 'run_benchmark', 'topic': '/inspection/actions/run_benchmark', 'type': 'RunBenchmark'}]})
 
     class _Result:
         def __init__(self):
@@ -174,7 +176,7 @@ def test_ros_action_bridge_aborts_when_provider_rejects_policy(monkeypatch):
 
     class _GoalHandle:
         def __init__(self):
-            self.request = type('Request', (), {'calibration_profile': 'default'})()
+            self.request = type('Request', (), {'profile_name': 'default'})()
             self.is_cancel_requested = False
             self.aborted = False
 
@@ -192,8 +194,7 @@ def test_ros_action_bridge_aborts_when_provider_rejects_policy(monkeypatch):
 
     class _Provider:
         def submit(self, *_args, **_kwargs):
-            from inspection_hmi_gateway.action_contract import ActionPolicyError
-            raise ActionPolicyError('run_calibration', 'calibration_workflow_not_available', '标定闭环尚未落地，当前仅保留目录位。')
+            return {'jobId': 'job-benchmark-1', 'kind': 'run_benchmark', 'status': 'COMPLETED', 'result': {'executionClass': 'synthetic'}}
 
         def get_job(self, _job_id):
             return None
@@ -207,9 +208,26 @@ def test_ros_action_bridge_aborts_when_provider_rejects_policy(monkeypatch):
 
     bridge = module.RosActionBridge(_Node(), enable_servers=False)
     bridge.provider = _Provider()
-    execute = bridge._make_execute_callback('run_calibration', _ActionType)
+    execute = bridge._make_execute_callback('run_benchmark', _ActionType)
     goal_handle = _GoalHandle()
     result = asyncio.run(execute(goal_handle))
-    assert goal_handle.aborted is True
-    assert result.accepted is False
-    assert result.message == 'calibration_workflow_not_available'
+    assert goal_handle.aborted is False
+    assert result.accepted is True
+    assert result.message == 'job-benchmark-1'
+
+
+
+def test_execute_callback_serializes_full_result_payload_for_native_transport():
+    bridge = RosActionBridge.__new__(RosActionBridge)
+    bridge.provider = _Provider(status_sequence=[{'status': 'COMPLETED', 'progress': 100, 'message': 'done', 'result': {'batchId': 'B-77', 'success': True}}])
+    bridge.poll_interval_sec = 0.01
+    bridge.job_timeout_sec = 0.05
+
+    goal_handle = _GoalHandle(_Request(requested_by='operator'))
+    execute = bridge._make_execute_callback('create_batch', _ActionType)
+    result = asyncio.run(execute(goal_handle))
+
+    assert goal_handle.final_state == 'succeeded'
+    assert result.accepted is True
+    assert result.result_json
+    assert json.loads(result.result_json) == {'batchId': 'B-77', 'success': True}

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
+
+#include "generated/inspection_station_action_codes_generated.hpp"
 
 namespace inspection_station_contract {
 
@@ -51,8 +54,17 @@ inline bool decode_frame(const std::vector<std::uint8_t>& raw, Frame& out) {
   return true;
 }
 
+inline constexpr auto supported_action_codes() {
+  return inspection_station_generated::supported_action_codes();
+}
+
 inline bool is_supported_action_code(std::uint8_t action_code) {
-  return action_code >= 0x01U && action_code <= 0x03U;
+  for (const auto code : supported_action_codes()) {
+    if (code == action_code) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace inspection_station_contract

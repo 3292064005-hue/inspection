@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-"""Gateway runtime utilities and compatibility re-exports.
+"""Gateway runtime utilities.
 
-``runtime_components`` remains the stable import surface for existing callers,
-while heavier projection/artifact logic now lives in ``runtime_projection``.
+``runtime_components`` remains the stable import surface for shared runtime
+helpers, while heavier projection/artifact logic now lives in
+``runtime_projection``.
 """
 
 from dataclasses import dataclass

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from inspection_utils.models import DecisionOutcome
+from inspection_utils.model_common import DecisionOutcome
 
 
 def apply_policy_overrides(result, outcome: DecisionOutcome, recipe: dict) -> DecisionOutcome:

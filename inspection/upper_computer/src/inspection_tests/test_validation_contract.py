@@ -84,12 +84,12 @@ def test_generated_verification_outputs_live_under_artifacts_directory() -> None
     root = Path(__file__).resolve().parents[2]
     coverage_text = (root / 'scripts' / 'run_backend_coverage_report.sh').read_text(encoding='utf-8')
     ros_text = (root / 'scripts' / 'validate_ros_workspace.sh').read_text(encoding='utf-8')
-    asset_manifest = (root / 'docs' / 'REPOSITORY_ASSET_STATUS.md').read_text(encoding='utf-8')
+    architecture_doc = (root / 'docs' / 'ARCHITECTURE.md').read_text(encoding='utf-8')
     assert 'ARTIFACT_DIR="$ROOT_DIR/.artifacts/verification"' in coverage_text
     assert 'backend_coverage.json' in coverage_text
     assert 'ARTIFACT_DIR="$ROOT_DIR/.artifacts/verification"' in ros_text
     assert 'LOG_DIR="$ARTIFACT_DIR/logs"' in ros_text
-    assert '.artifacts/verification/backend_coverage.json' in asset_manifest
+    assert '.artifacts/verification/backend_coverage.json' in architecture_doc
 
 
 def test_historical_verification_reports_are_not_kept_under_docs() -> None:
@@ -209,12 +209,11 @@ def test_diagnostics_node_enforces_typed_interface_availability_in_strict_mode()
 
 def test_bringup_entrypoints_use_package_module_builder_and_absolute_offline_replay_defaults() -> None:
     root = Path(__file__).resolve().parents[2]
-    full_stack = (root / 'src' / 'inspection_bringup' / 'launch' / 'full_stack.launch.py').read_text(encoding='utf-8')
     sim_stack = (root / 'src' / 'inspection_bringup' / 'launch' / 'sim_stack.launch.py').read_text(encoding='utf-8')
     offline_replay = (root / 'src' / 'inspection_bringup' / 'launch' / 'offline_replay.launch.py').read_text(encoding='utf-8')
     runtime_launch = (root / 'src' / 'inspection_bringup' / 'inspection_bringup' / 'runtime_launch_config.py').read_text(encoding='utf-8')
     package_xml = (root / 'src' / 'inspection_bringup' / 'package.xml').read_text(encoding='utf-8')
-    assert 'from inspection_bringup.sim_stack_common import build_simulated_stack' in full_stack
+    assert 'from inspection_bringup.sim_stack_common import build_simulated_stack' in sim_stack
     assert 'from inspection_bringup.sim_stack_common import build_simulated_stack' in sim_stack
     assert 'build_launch_runtime_payload' in offline_replay
     assert 'station_config_path' in offline_replay

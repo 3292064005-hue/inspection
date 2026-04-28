@@ -6,7 +6,7 @@ import time
 from collections import deque
 from typing import Any
 
-from inspection_utils.protocol import Frame, FrameStreamParser
+from inspection_utils.station_common import Frame, FrameStreamParser
 
 
 class RXParser:

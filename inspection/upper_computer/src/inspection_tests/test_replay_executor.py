@@ -14,14 +14,15 @@ def test_replay_executor_lists_and_loads_trace(tmp_path: Path):
     (traces / 'TRACE-1.jsonl').write_text(
         json.dumps({'type': 'capture_request'}) + '\n' +
         json.dumps({'type': 'inspection_result'}) + '\n' +
-        json.dumps({'type': 'sort_command'}) + '\n' +
+        json.dumps({'type': 'decision_output'}) + '\n' +
+        json.dumps({'type': 'sort_request'}) + '\n' +
         json.dumps({'type': 'cycle_finish'}) + '\n', encoding='utf-8'
     )
     executor = ReplayExecutor(tmp_path)
     assert executor.list_traces() == ['TRACE-1']
     summary = executor.replay_summary('TRACE-1')
     assert summary['trace_id'] == 'TRACE-1'
-    assert summary['event_count'] == 4
+    assert summary['event_count'] == 5
     assert summary['final_type'] == 'cycle_finish'
     assert summary['validation']['valid'] is True
     diff = executor.compare_trace_to_summary('TRACE-1')

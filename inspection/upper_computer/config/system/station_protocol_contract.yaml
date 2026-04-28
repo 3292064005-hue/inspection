@@ -1,0 +1,14 @@
+protocol:
+  accepted_versions:
+    - v1
+  compatible_reported_versions:
+    v1:
+      - v1
+  capability_required_fields:
+    - protocol_version
+    - firmware_version
+    - device_id
+    - supported_action_codes
+  require_supported_action_codes: true
+  allow_action_code_superset: true
+  heartbeat_version_required: false

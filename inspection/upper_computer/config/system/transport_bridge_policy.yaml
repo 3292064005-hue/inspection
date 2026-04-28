@@ -1,0 +1,193 @@
+bridges:
+  control:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  capture_request:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  diagnostics:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  supervisor_command:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  supervisor_state:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  action_executor_event:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  fsm_transition:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  vision_frame_acquired:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  decision_published:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  bridge_heartbeat:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  bridge_handshake_complete:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only
+  fault_raised:
+    boundary: edge_bridge
+    coreTransport: typed
+    legacyPublishEnabled: false
+    typedPublishEnabled: true
+    deprecationPhase: sunset_planned
+    sunsetRelease: 2026.Q4
+    documentationRefs:
+    - upper_computer/docs/ARCHITECTURE.md
+    - docs/IMPLEMENTATION_LANDING_NOTES.md
+    legacyTelemetryEnabled: true
+    zeroUsageRemovalAfterReleases: 2
+    removalCandidateWhenZeroUsage: true
+    removalCandidate: false
+    releaseNoteRequired: true
+    rollbackStrategy: tagged_release_hotfix_only

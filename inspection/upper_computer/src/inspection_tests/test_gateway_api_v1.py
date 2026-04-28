@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -11,8 +13,15 @@ from inspection_hmi_gateway.recipe_store import RecipeStore
 from inspection_hmi_gateway.result_store import ResultStore
 from inspection_hmi_gateway.server.auth import hash_password
 from inspection_hmi_gateway.server.main import create_app
+from recipe_payloads import make_hmi_recipe_payload
 from inspection_utils.config import save_yaml
 
+
+
+
+@pytest.fixture(autouse=True)
+def _gateway_test_env(monkeypatch):
+    monkeypatch.setenv('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '1')
 
 class _FakeEventBus:
     def attach_loop(self, _loop) -> None:
@@ -69,11 +78,61 @@ class _FakeNode:
         self.result_store = ResultStore(logs_root)
         self.recipe_store.save_from_hmi({'id': 'recipe-api', 'name': 'API 配方', 'version': '1.0.0', 'roi': [1, 2, 3, 4], 'qrRoi': [5, 6, 7, 8]})
         self.recipe_store.activate('recipe-api')
+        self.app = self
 
     def refresh_recipes(self) -> list[dict]:
         default = self.recipe_store.current_default()
         active_recipe_id = str(default.get('recipe_id', '')) if isinstance(default, dict) else ''
         return [self.recipe_store.to_hmi_profile(item, active_recipe_id=active_recipe_id) for item in self.recipe_store.load_all()]
+
+    def snapshot_payload(self) -> dict:
+        return self.state.snapshot_payload()
+
+    def stats_payload(self) -> dict:
+        return self.state.stats_payload()
+
+    def recipe_history(self, recipe_id: str) -> dict:
+        return {
+            'activations': self.recipe_store.list_activation_history(recipe_id=recipe_id),
+            'revisions': self.recipe_store.list_revision_history(recipe_id=recipe_id),
+        }
+
+    def save_recipe(self, payload: dict) -> dict:
+        recipe = self.recipe_store.save_from_hmi(payload)
+        default = self.recipe_store.current_default()
+        active_recipe_id = str(default.get('recipe_id', '')) if isinstance(default, dict) else ''
+        profiles = [self.recipe_store.to_hmi_profile(item, active_recipe_id=active_recipe_id) for item in self.recipe_store.load_all()]
+        target = next((item for item in profiles if item['id'] == str(recipe.get('recipe_id', ''))), None)
+        if target is None:
+            raise RuntimeError('配方保存后无法重新装载。')
+        return target
+
+    def activate_recipe(self, recipe_id: str, *, operator: str) -> dict:
+        return self.recipe_store.activate(recipe_id, operator=operator)
+
+    def result_detail(self, result_id: str):
+        return self.result_store.get_result(result_id)
+
+    def read_model_status(self) -> dict:
+        return self.result_store.read_model_status()
+
+    def repair_read_model(self) -> dict:
+        self.result_store.repair_read_model()
+        return self.result_store.read_model_status(refresh=False)
+
+    def batch_summary(self, *, batch_id: str) -> dict:
+        return self.result_store.batch_summary(batch_id=batch_id)
+
+    def result_statistics(self, **filters):
+        return self.result_store.query_statistics(**filters)
+
+    def register_action_jobs(self, *, submit, get_job, cancel) -> None:
+        self._action_submit = submit
+        self._action_get_job = get_job
+        self._action_cancel = cancel
+
+    def register_action_executor_updates(self, handler) -> None:
+        self._action_update_handler = handler
 
     def call_start(self, *args, **kwargs):
         return True, 'started'
@@ -103,9 +162,12 @@ class _FakeNode:
             },
         }
 
-    def _artifact_url(self, path: str) -> str:
+    def artifact_url(self, path: str) -> str:
         normalized = str(path or '').replace('\\', '/').lstrip('/')
         return f'/artifacts/{normalized}' if normalized else ''
+
+    def _artifact_url(self, path: str) -> str:
+        return self.artifact_url(path)
 
 
 class _FakeRuntime:
@@ -236,9 +298,9 @@ def test_gateway_v1_auth_and_audit(tmp_path: Path) -> None:
         assert snapshot.json()['data']['batchId'] == 'BATCH-API'
 
         start_resp = client.post('/api/v1/station/start', headers=operator_headers)
-        assert start_resp.status_code == 200
+        assert start_resp.status_code == 404
 
-        recipe_denied = client.post('/api/v1/recipes', headers=operator_headers, json={'id': 'recipe-new', 'name': '新配方', 'version': '1.0.0', 'roi': [1, 2, 3, 4], 'qrRoi': [5, 6, 7, 8]})
+        recipe_denied = client.post('/api/v1/recipes', headers=operator_headers, json=make_hmi_recipe_payload(recipe_id='recipe-new', name='新配方'))
         assert recipe_denied.status_code == 403
 
         export_resp = client.post('/api/v1/exports/BATCH-API', headers=operator_headers)
@@ -256,7 +318,7 @@ def test_gateway_v1_auth_and_audit(tmp_path: Path) -> None:
         audit_resp = client.get('/api/v1/audit', headers=admin_headers)
         assert audit_resp.status_code == 200
         actions = [item['action'] for item in audit_resp.json()['data']]
-        assert 'STATION_START' in actions
+        assert 'STATION_START' not in actions
         assert 'EXPORT_BATCH' in actions
         assert 'EXPORT_RESULT' in actions
         assert 'EXPORT_TRACE' in actions
@@ -401,9 +463,9 @@ def test_process_engineer_can_manage_recipe_but_operator_cannot(tmp_path: Path) 
     with TestClient(app) as client:
         operator_headers = _auth_header(client, 'operator', 'operator123')
         engineer_headers = _auth_header(client, 'engineer', 'engineer123')
-        denied = client.post('/api/v1/recipes', headers=operator_headers, json={'id': 'recipe-new', 'name': '新配方', 'version': '1.0.0', 'roi': [1, 2, 3, 4], 'qrRoi': [5, 6, 7, 8]})
+        denied = client.post('/api/v1/recipes', headers=operator_headers, json=make_hmi_recipe_payload(recipe_id='recipe-new', name='新配方'))
         assert denied.status_code == 403
-        allowed = client.post('/api/v1/recipes', headers=engineer_headers, json={'id': 'recipe-new', 'name': '新配方', 'version': '1.0.0', 'roi': [1, 2, 3, 4], 'qrRoi': [5, 6, 7, 8]})
+        allowed = client.post('/api/v1/recipes', headers=engineer_headers, json=make_hmi_recipe_payload(recipe_id='recipe-new', name='新配方'))
         assert allowed.status_code == 200
 
 
@@ -433,7 +495,7 @@ def test_gateway_result_detail_returns_trace_bundle(tmp_path: Path) -> None:
 
 
 
-def test_legacy_diagnostics_route_is_compat_wrapper_over_action_plane(tmp_path: Path) -> None:
+def test_removed_legacy_routes_return_not_found(tmp_path: Path) -> None:
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -442,24 +504,17 @@ def test_legacy_diagnostics_route_is_compat_wrapper_over_action_plane(tmp_path: 
         recipe_root=str(recipes_root),
         frontend_dist=str(tmp_path / 'frontend_dist_missing'),
         users_path=str(_users_file(tmp_path)),
-        runtime_factory=lambda: _MaintenanceEnabledRuntime(logs_root, recipes_root),
+        runtime_factory=lambda: _FakeRuntime(logs_root, recipes_root),
     )
     with TestClient(app) as client:
         admin_headers = _auth_header(client, 'admin', 'admin123')
-        response = client.post('/api/v1/diagnostics/actions', headers=admin_headers, json={'action': 'CAPTURE_FRAME'})
-        assert response.status_code == 200
-        assert response.headers['x-inspection-compatibility-route'] == 'true'
-        payload = response.json()['data']
-        assert payload['action'] == 'CAPTURE_FRAME'
-        assert payload['success'] is True
-
-        jobs = client.get('/api/v1/actions/jobs?limit=10&offset=0', headers=admin_headers)
-        assert jobs.status_code == 200
-        items = jobs.json()['data']
-        assert any(item['kind'] == 'diagnostic_capture_frame' for item in items)
+        operator_headers = _auth_header(client, 'operator', 'operator123')
+        assert client.post('/api/v1/diagnostics/actions', headers=admin_headers, json={'action': 'CAPTURE_FRAME'}).status_code == 404
+        assert client.post('/api/v1/station/start', headers=operator_headers).status_code == 404
 
 
-def test_legacy_station_route_uses_action_jobs_without_direct_fallback(tmp_path: Path) -> None:
+
+def test_results_statistics_endpoint_is_query_driven(tmp_path: Path) -> None:
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -472,17 +527,40 @@ def test_legacy_station_route_uses_action_jobs_without_direct_fallback(tmp_path:
     )
     with TestClient(app) as client:
         operator_headers = _auth_header(client, 'operator', 'operator123')
-        response = client.post('/api/v1/station/start', headers=operator_headers)
+        response = client.get('/api/v1/results/statistics?sampleLimit=40', headers=operator_headers)
         assert response.status_code == 200
-        assert response.headers['x-inspection-compatibility-route'] == 'true'
+        payload = response.json()['data']
+        assert payload['summary']['total'] == 1
+        assert payload['summary']['ngCount'] == 1
+        assert payload['summary']['yieldRate'] == 0
+        assert payload['cycleTrend'][0]['recipeId'] == 'recipe-api'
+        assert payload['recipeBreakdown'][0]['recipeName'] == 'API 配方'
+        assert payload['readModelStatus']['querySurface'] == 'projection'
 
-        jobs = client.get('/api/v1/actions/jobs?limit=10&offset=0', headers=operator_headers)
-        assert jobs.status_code == 200
-        items = jobs.json()['data']
-        assert any(item['kind'] == 'start_batch' for item in items)
+
+def test_action_capability_matrix_endpoint_returns_public_surface_only(tmp_path: Path) -> None:
+    logs_root = tmp_path / 'logs'
+    recipes_root = tmp_path / 'recipes'
+    _write_logs(logs_root)
+    app = create_app(
+        log_root=str(logs_root),
+        recipe_root=str(recipes_root),
+        frontend_dist=str(tmp_path / 'frontend_dist_missing'),
+        users_path=str(_users_file(tmp_path)),
+        runtime_factory=lambda: _FakeRuntime(logs_root, recipes_root),
+    )
+    with TestClient(app) as client:
+        operator_headers = _auth_header(client, 'operator', 'operator123')
+        response = client.get('/api/v1/actions/capability-matrix', headers=operator_headers)
+        assert response.status_code == 200
+        payload = response.json()['data']
+        assert 'run_calibration' not in payload
+        assert 'run_benchmark' not in payload
+        assert payload['set_maintenance_mode']['availability'] == 'production_ready'
+        assert payload['diagnostic_capture_frame']['governance']['tier'] == 'official'
 
 
-def test_legacy_diagnostics_route_maps_policy_errors_structurally(tmp_path: Path) -> None:
+def test_internal_action_capability_matrix_endpoint_returns_empty_internal_surface(tmp_path: Path) -> None:
     logs_root = tmp_path / 'logs'
     recipes_root = tmp_path / 'recipes'
     _write_logs(logs_root)
@@ -495,10 +573,26 @@ def test_legacy_diagnostics_route_maps_policy_errors_structurally(tmp_path: Path
     )
     with TestClient(app) as client:
         admin_headers = _auth_header(client, 'admin', 'admin123')
-        response = client.post('/api/v1/diagnostics/actions', headers=admin_headers, json={'action': 'CAPTURE_FRAME'})
-        assert response.status_code == 409
-        assert response.headers['x-inspection-compatibility-route'] == 'true'
-        assert response.headers['x-inspection-canonical-action-plane'] == '/api/v1/actions/*'
-        detail = response.json()['error']['detail']
-        assert detail['code'] == 'diagnostic_requires_maintenance_enabled'
-        assert detail['kind'] == 'diagnostic_capture_frame'
+        response = client.get('/api/internal/actions/capability-matrix', headers=admin_headers)
+        assert response.status_code == 404
+
+
+def test_compatibility_routes_are_removed_and_canonical_plane_remains_available(tmp_path: Path) -> None:
+    logs_root = tmp_path / 'logs'
+    recipes_root = tmp_path / 'recipes'
+    _write_logs(logs_root)
+    app = create_app(
+        log_root=str(logs_root),
+        recipe_root=str(recipes_root),
+        frontend_dist=str(tmp_path / 'frontend_dist_missing'),
+        users_path=str(_users_file(tmp_path)),
+        runtime_factory=lambda: _FakeRuntime(logs_root, recipes_root),
+    )
+    with TestClient(app) as client:
+        operator_headers = _auth_header(client, 'operator', 'operator123')
+        legacy = client.post('/api/v1/station/start', headers=operator_headers)
+        assert legacy.status_code == 404
+
+        canonical = client.post('/api/v1/actions/start-batch', headers=operator_headers, json={'recipeId': 'recipe-api', 'batchId': 'BATCH-API'})
+        assert canonical.status_code == 200
+        assert canonical.json()['data']['kind'] == 'start_batch'

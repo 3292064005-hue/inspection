@@ -9,7 +9,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from inspection_bringup.runtime_launch_config import build_launch_runtime_payload
-from inspection_utils.param_parsing import coerce_bool
+from inspection_utils.config_common import coerce_bool
 
 _REAL_ENTRY_SIM_WARNING = '[inspection_bringup] real_station.launch.py is running in simulation mode by explicit override.'
 
@@ -81,7 +81,7 @@ def _launch_setup(context, *_args, **_kwargs):
     station_parameters = dict(payload['station_parameters'])
     station_parameters['sim_mode'] = sim_mode
     fsm_parameters = dict(payload['fsm_parameters'])
-    fsm_parameters.update({'auto_start': True, 'profile_name': profile_name})
+    fsm_parameters.update({'auto_start': False, 'profile_name': profile_name})
     summary = effective_bundle['summary']
     actions = []
     if sim_mode:
@@ -149,7 +149,7 @@ def _launch_setup(context, *_args, **_kwargs):
             ],
         ),
         Node(package='inspection_diagnostics', executable='diagnostics_node', name='inspection_diagnostics_node', parameters=[{'enable_annotated_image_diagnostics': enable_annotated_image_diagnostics}, managed_runtime_params]),
-        Node(package='inspection_supervisor', executable='supervisor_node', name='inspection_supervisor_node', parameters=[{'profile_name': profile_name, 'health_timeout_sec': supervisor_health_timeout_sec}, managed_runtime_params]),
+        Node(package='inspection_supervisor', executable='supervisor_node', name='inspection_supervisor_node', parameters=[{'profile_name': profile_name, 'health_timeout_sec': supervisor_health_timeout_sec}]),
         Node(package='inspection_orchestrator', executable='orchestrator_node', name='inspection_orchestrator_node', parameters=[orchestrator_config_path, managed_runtime_params]),
         Node(package='inspection_hmi', executable='hmi_node', name='inspection_hmi_node'),
     ])
@@ -223,7 +223,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('action_executor_enabled', default_value='true'),
         DeclareLaunchArgument('native_action_server_enabled', default_value='true'),
         DeclareLaunchArgument('native_action_client_enabled', default_value='true'),
-        DeclareLaunchArgument('require_frontend_dist', default_value='true'),
+        DeclareLaunchArgument('require_frontend_dist', default_value='false'),
         DeclareLaunchArgument('strict_user_config', default_value='true'),
         OpaqueFunction(function=_launch_setup),
     ])

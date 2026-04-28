@@ -15,7 +15,8 @@ def test_regression_runner_and_report(tmp_path: Path):
     (traces / 'TRACE-1.jsonl').write_text(
         json.dumps({'type': 'capture_request'}) + '\n' +
         json.dumps({'type': 'inspection_result'}) + '\n' +
-        json.dumps({'type': 'sort_command'}) + '\n' +
+        json.dumps({'type': 'decision_output'}) + '\n' +
+        json.dumps({'type': 'sort_request'}) + '\n' +
         json.dumps({'type': 'cycle_finish'}) + '\n', encoding='utf-8'
     )
     cases = RegressionRunner(tmp_path).run()

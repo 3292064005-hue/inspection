@@ -1,0 +1,21 @@
+adapters:
+  serial:
+    capability_profile: stm32_station_default
+    capabilities:
+    - CAPABILITY_QUERY
+    - HEARTBEAT
+    - RESET_ACK
+    - SERIAL_LINK
+    - SORT_ACK
+    runtime_truth: real
+    source: builtin
+  mock:
+    capability_profile: simulation_station_default
+    capabilities:
+    - CAPABILITY_QUERY
+    - HEARTBEAT
+    - RESET_ACK
+    - SORT_ACK
+    - SYNTHETIC_RUNTIME
+    runtime_truth: synthetic
+    source: builtin

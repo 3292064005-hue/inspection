@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from inspection_utils.paths import resolve_resource_path, resolve_runtime_path
+from inspection_utils.io_common import resolve_resource_path, resolve_runtime_path
 
 from .recipe_components import (
     RecipeActivationService,
@@ -106,6 +106,29 @@ class RecipeStore:
         if recipe_id:
             self.revision_archive.write_snapshot(recipe_id, {key: value for key, value in recipe.items() if key != '_path'}, reason='save')
         return recipe
+
+    def validate_activation_candidate(self, *, recipe_id: str, batch_id: str, operator: str) -> dict[str, Any]:
+        """Validate a recipe activation candidate without committing it.
+
+        Args:
+            recipe_id: Target recipe identifier.
+            batch_id: Synthetic or real batch id used for start-contract checks.
+            operator: Actor that would own the activation on commit.
+
+        Returns:
+            Staged activation and validation metadata.
+
+        Raises:
+            RecipeActivationError: The requested candidate cannot be staged.
+
+        Boundary behavior:
+            This method is side-effect free. It is safe for dry-run validation
+            and for pre-commit checks inside the switch-recipe action workflow.
+        """
+        try:
+            return self.activation_service.validate_activation_candidate(recipe_id=recipe_id, batch_id=batch_id, operator=operator)
+        except Exception as exc:
+            raise RecipeActivationError(str(exc)) from exc
 
     def activate(self, recipe_id: str, *, operator: str = 'hmi_operator') -> dict[str, Any]:
         return self.activation_service.activate(recipe_id, operator=operator)

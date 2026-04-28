@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from inspection_utils.logging_tools import safe_json_loads
+from inspection_utils.logging_common import safe_json_loads
 
 from .responses import utc_now
 
@@ -24,12 +24,12 @@ async def handle_gateway_websocket(*, websocket: WebSocket, auth_service: Any, e
     if event_bus is not None:
         await event_bus.connect(websocket)
     try:
-        app_facade = context.app()
+        app_service = context.app()
         if event_bus is not None:
             await websocket.send_json(event_bus.make_message('gateway.status', {'mode': 'http', 'transport': 'ONLINE', 'httpOk': True, 'wsOk': True, 'retryCount': 0, 'lastError': '', 'updatedAt': utc_now(),}))
             await websocket.send_json(event_bus.make_message('auth.session', {k: v for k, v in session.items() if k != 'token'}))
-            await websocket.send_json(event_bus.make_message('station.state.updated', app_facade.snapshot_payload()))
-            await websocket.send_json(event_bus.make_message('station.count.updated', app_facade.stats_payload()))
+            await websocket.send_json(event_bus.make_message('station.state.updated', app_service.snapshot_payload()))
+            await websocket.send_json(event_bus.make_message('station.count.updated', app_service.stats_payload()))
         while True:
             raw_text = await websocket.receive_text()
             payload = safe_json_loads(raw_text or '{}')

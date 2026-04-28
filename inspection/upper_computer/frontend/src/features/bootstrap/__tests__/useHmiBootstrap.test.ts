@@ -74,6 +74,20 @@ describe('useHmiBootstrap', () => {
     bootstrap.stop();
   });
 
+  it('subscribes only to canonical finalized result events for first-party result handling', async () => {
+    const { useHmiBootstrap } = await import('@/features/bootstrap/useHmiBootstrap');
+    const bootstrap = useHmiBootstrap();
+
+    await bootstrap.start();
+
+    const registeredEvents = (gatewayStub.on as ReturnType<typeof vi.fn>).mock.calls.map(([event]) => event);
+    expect(registeredEvents).toContain('inspection.result.finalized');
+    expect(registeredEvents).not.toContain('inspection.result.created');
+
+    bootstrap.stop();
+  });
+
+
   it('re-synchronizes after a recovered reconnect event', async () => {
     const { useHmiBootstrap } = await import('@/features/bootstrap/useHmiBootstrap');
     const bootstrap = useHmiBootstrap();

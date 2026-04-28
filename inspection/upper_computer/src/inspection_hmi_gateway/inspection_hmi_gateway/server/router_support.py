@@ -1,42 +1,12 @@
 from __future__ import annotations
 
-"""Shared HTTP transport helpers for gateway action routes.
-
-This module keeps the standard action plane and the legacy compatibility
-façades aligned on transport semantics so policy, dispatch, and runtime
-failures cannot drift across routers.
-"""
+"""Shared HTTP error translation helpers for canonical gateway routes."""
 
 from typing import Mapping, NoReturn
 
 from fastapi import HTTPException
 
 from ..action_contract import ActionDispatchError, ActionPolicyError
-
-COMPATIBILITY_HEADERS: dict[str, str] = {
-    'X-Inspection-Compatibility-Route': 'true',
-    'X-Inspection-Canonical-Action-Plane': '/api/v1/actions/*',
-}
-
-
-def compat_headers(*, route: str) -> dict[str, str]:
-    """Return immutable headers advertising compatibility-route status.
-
-    Args:
-        route: Concrete legacy HTTP route serving as a façade.
-
-    Returns:
-        Header mapping safe to attach to the response.
-
-    Boundary behavior:
-        The canonical control plane remains discoverable even when older
-        clients continue to use a compatibility route.
-    """
-    return {
-        **COMPATIBILITY_HEADERS,
-        'X-Inspection-Compatibility-Route-Name': str(route or '').strip(),
-    }
-
 
 
 def raise_action_http_error(
@@ -47,23 +17,26 @@ def raise_action_http_error(
     runtime_code: str = 'action_execution_failed',
     headers: Mapping[str, str] | None = None,
 ) -> NoReturn:
-    """Translate domain/transport exceptions into consistent HTTP failures.
+    """Translate domain and transport exceptions into consistent HTTP failures.
 
     Args:
-        exc: Original domain exception.
-        invalid_status: HTTP status for caller input errors.
-        runtime_status: HTTP status for synchronous façade runtime failures.
-        runtime_code: Machine-readable code used for ``RuntimeError`` payloads.
-        headers: Optional HTTP headers preserved on error responses.
+        exc: Domain or transport exception raised by the service layer.
+        invalid_status: HTTP status used for request/value validation errors.
+        runtime_status: HTTP status used for runtime failures.
+        runtime_code: Canonical error code for runtime failures.
+        headers: Optional response headers to preserve.
+
+    Returns:
+        Never returns. Always raises ``HTTPException`` or re-raises ``exc``.
 
     Raises:
-        HTTPException: Always raised with normalized ``detail`` payload.
+        HTTPException: For mapped action-policy, dispatch, validation, or runtime
+            failures.
         Exception: Re-raises unknown exception types unchanged.
 
     Boundary behavior:
-        Compatibility façades synchronously wait on persisted action jobs.
-        A terminal job failure therefore surfaces as a structured HTTP error
-        instead of an opaque string mismatch versus the canonical action plane.
+        The canonical action plane no longer carries compatibility-route headers.
+        Transport semantics are now shared only across first-party public routes.
     """
     normalized_headers = {str(key): str(value) for key, value in dict(headers or {}).items()}
     if isinstance(exc, ActionPolicyError):

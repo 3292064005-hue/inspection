@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from inspection_utils.lifecycle_matrix import is_standard_node, normalize_governed_node_name
+from inspection_utils.lifecycle_common import is_standard_node, normalize_governed_node_name
 
 from .mode_manager import SupervisorMode
 

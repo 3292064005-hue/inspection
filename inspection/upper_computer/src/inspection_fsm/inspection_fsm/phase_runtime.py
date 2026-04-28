@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from inspection_utils.param_parsing import parameter_as_bool
+from inspection_utils.config_common import parameter_as_bool
 
 from .fsm_core import StationEvent, StationPhase, clear_cycle_runtime, finish_cycle, phase_timeout_key, start_cycle
 
@@ -22,6 +22,7 @@ class FSMPhaseRuntimeSupport:
                 trace_id=self.node.data.trace_id,
                 item_id=self.node.data.item_id,
                 batch_id=self.node.data.batch_id,
+                recipe_id=self.node.data.recipe_id,
             )
             self.node.runtime.current.current_phase = self.node.data.phase.value
             self.node.cycle_start = time.monotonic()

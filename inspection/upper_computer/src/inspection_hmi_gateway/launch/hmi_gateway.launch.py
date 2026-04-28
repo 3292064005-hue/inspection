@@ -29,6 +29,7 @@ def generate_launch_description():
     frontend_dist = LaunchConfiguration('frontend_dist')
     users_path = LaunchConfiguration('users_path')
     hmi_port = LaunchConfiguration('hmi_port')
+    require_frontend_dist = LaunchConfiguration('require_frontend_dist')
     return LaunchDescription([
         DeclareLaunchArgument('managed_runtime_enabled', default_value='true'),
         DeclareLaunchArgument('managed_runtime_autostart', default_value='true'),
@@ -39,6 +40,7 @@ def generate_launch_description():
         DeclareLaunchArgument('recipe_root', default_value='config/recipes'),
         DeclareLaunchArgument('frontend_dist', default_value=str(package_share / 'frontend' / 'dist')),
         DeclareLaunchArgument('hmi_port', default_value='8080'),
+        DeclareLaunchArgument('require_frontend_dist', default_value='false'),
         DeclareLaunchArgument('users_path', default_value='config/system/hmi_users.yaml'),
         Node(
             package='inspection_hmi_gateway',
@@ -65,7 +67,7 @@ def generate_launch_description():
                 'INSPECTION_HMI_RECIPE_ROOT': recipe_root,
                 'INSPECTION_HMI_FRONTEND_DIST': frontend_dist,
                 'INSPECTION_HMI_USERS_PATH': users_path,
-                'INSPECTION_HMI_REQUIRE_FRONTEND_DIST': '1',
+                'INSPECTION_HMI_REQUIRE_FRONTEND_DIST': require_frontend_dist,
                 'INSPECTION_ACTION_EXECUTOR_ENABLED': action_executor_enabled,
                 'INSPECTION_NATIVE_ACTION_CLIENT_ENABLED': native_action_client_enabled,
             },

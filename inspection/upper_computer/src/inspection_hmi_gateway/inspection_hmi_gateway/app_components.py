@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""Focused application services for the gateway façade.
+"""Focused application services for the gateway runtime boundary.
 
-The public ``GatewayAppFacade`` intentionally stays stable for existing callers,
-while these components hold narrower responsibilities:
+These components hold narrower responsibilities behind the authoritative
+``GatewayApplicationService`` runtime entrypoint:
 
 - recipe management and projection refresh
 - result/read-model queries
@@ -14,6 +14,7 @@ while these components hold narrower responsibilities:
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import os
 from typing import Any, Callable
 import uuid
 
@@ -34,6 +35,16 @@ except ImportError:  # pragma: no cover - unit-test fallback without generated R
 
 from .recipe_store import RecipeActivationError
 from .runtime_components import ServiceCallResult, utc_now
+
+
+def reset_topic_fallback_enabled() -> bool:
+    """Return whether control-topic reset fallback is explicitly enabled.
+
+    The reset service path is authoritative. Topic fallback is disabled by
+    default and may only be re-enabled through an explicit rollback/migration
+    environment override.
+    """
+    return str(os.environ.get('INSPECTION_RESET_TOPIC_FALLBACK_ENABLED', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 @dataclass(slots=True)
@@ -138,6 +149,9 @@ class GatewayResultQueryService:
 
     def batch_summary(self, *, batch_id: str) -> dict[str, Any]:
         return self.result_store.batch_summary(batch_id=batch_id)
+
+    def result_statistics(self, **filters: Any) -> dict[str, Any]:
+        return self.result_store.query_statistics(**filters)
 
     def artifact_url(self, path: str) -> str:
         return self.artifact_url_resolver(path)
@@ -372,15 +386,23 @@ class GatewayStationCommandService:
             timeout_message='故障复位请求超时。',
         )
         if not result.ok and result.message == '未找到 /inspection/reset_fault 服务。':
+            if not reset_topic_fallback_enabled():
+                def _apply_fallback_blocked(state: Any) -> None:
+                    state.guidance = '复位服务不可用，且未启用控制话题复位回退。'
+                    state.last_updated_at = utc_now()
+
+                self._mutate_state(_apply_fallback_blocked)
+                self.event_bus.broadcast('station.state.updated', self.state_snapshot())
+                return False, '未找到 /inspection/reset_fault 服务，且未启用控制话题复位回退。'
             self.publish_control('reset')
 
             def _apply_fallback_reset(state: Any) -> None:
-                state.guidance = '复位服务不可用，已退回控制话题复位。'
+                state.guidance = '复位服务不可用，已通过控制话题执行回退复位。'
                 state.last_updated_at = utc_now()
 
             self._mutate_state(_apply_fallback_reset)
             self.event_bus.broadcast('station.state.updated', self.state_snapshot())
-            return True, '已退回控制话题复位。'
+            return True, '已通过控制话题执行回退复位。'
         if result.ok:
             fault = self._read_state(lambda state: deepcopy(state.latest_fault))
 

@@ -17,9 +17,9 @@ except ImportError:  # pragma: no cover - unit-test fallback without ROS message
 if TYPE_CHECKING:  # pragma: no cover
     from sensor_msgs.msg import Image
     from inspection_interfaces.msg import InspectionResult
-from inspection_utils.image_tools import save_image
-from inspection_utils.logging_tools import event_to_json, safe_json_loads
-from inspection_utils.paths import sanitize_trace_id
+from inspection_utils.vision_common import save_image
+from inspection_utils.logging_common import event_to_json, safe_json_loads
+from inspection_utils.io_common import sanitize_trace_id
 
 from .artifact_writer import ArtifactWriteReceipt
 from .detectors import process_frame
@@ -115,13 +115,44 @@ class ProcessorExecutionRuntime:
             self.process_bound(request, bound)
             self.node.fallback_item_id += 1
 
-    def handle_capture_request(self, msg: String) -> None:
-        if self.node.lifecycle_state == 'FINALIZED':
+    def handle_capture_request_payload(self, payload: dict[str, Any]) -> None:
+        """Consume one canonical capture-request payload.
+
+        Args:
+            payload: Canonical request dictionary reconstructed from either the
+                typed transport or the legacy JSON boundary bridge.
+
+        Returns:
+            None. The request is queued or processed immediately.
+
+        Raises:
+            No action-specific exception is raised. Invalid or duplicate inputs
+            are handled as bounded runtime events.
+
+        Boundary behavior:
+            The execution runtime consumes canonical dictionaries directly so
+            typed subscribers no longer need to synthesize an intermediate
+            ``std_msgs/String`` message before entering the hot path.
+        """
+        lifecycle_state = str(getattr(self.node, 'lifecycle_state', '') or '')
+        if lifecycle_state == 'FINALIZED':
             return
-        request = safe_json_loads(
-            msg.data,
-            {'item_id': self.node.fallback_item_id, 'batch_id': self.node.default_batch_id, 'trace_id': f'FALLBACK-{self.node.fallback_item_id:05d}'},
-        )
+        if not bool(getattr(self.node, 'is_active', lambda: lifecycle_state == 'ACTIVE')()):
+            request = dict(payload or {})
+            request.setdefault('item_id', getattr(self.node, 'fallback_item_id', -1))
+            request.setdefault('trace_id', f"FALLBACK-{int(request.get('item_id', getattr(self.node, 'fallback_item_id', -1))):05d}")
+            if hasattr(self.node, '_emit_event'):
+                self.node._emit_event(
+                    'vision_capture_ignored_inactive',
+                    trace_id=request.get('trace_id', ''),
+                    item_id=int(request.get('item_id', -1)),
+                    lifecycle_state=lifecycle_state or 'UNKNOWN',
+                )
+            return
+        request = dict(payload or {})
+        request.setdefault('item_id', self.node.fallback_item_id)
+        request.setdefault('batch_id', self.node.default_batch_id)
+        request.setdefault('trace_id', f'FALLBACK-{self.node.fallback_item_id:05d}')
         request['_request_monotonic_ts'] = time.monotonic()
         if request.get('trace_id') == self.node.last_trace_id and (time.monotonic() - self.node.last_trace_started_at) < 0.2:
             self.node._emit_event('vision_capture_deduplicated', trace_id=request.get('trace_id', ''), item_id=int(request.get('item_id', -1)))
@@ -149,6 +180,13 @@ class ProcessorExecutionRuntime:
                 pending_capacity=self.node.capture_pending_queue_size,
                 pending_policy=self.node.capture_pending_overload_policy,
             )
+
+    def handle_capture_request(self, msg: String) -> None:
+        payload = safe_json_loads(
+            msg.data,
+            {'item_id': self.node.fallback_item_id, 'batch_id': self.node.default_batch_id, 'trace_id': f'FALLBACK-{self.node.fallback_item_id:05d}'},
+        )
+        self.handle_capture_request_payload(payload)
 
     def process_bound(self, request: dict[str, Any], frame: FrameSample) -> None:
         item_id = int(request.get('item_id', self.node.fallback_item_id))

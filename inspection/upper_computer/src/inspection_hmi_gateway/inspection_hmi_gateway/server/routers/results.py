@@ -20,7 +20,7 @@ def command_service(context: GatewayAppContext = Depends(get_context)) -> Result
     return ResultCommandService(context)
 
 
-@router.get('/results')
+@router.get('/results', operation_id='getInspectionResults')
 async def get_results(
     batchId: str = '',
     recipeId: str = '',
@@ -51,7 +51,28 @@ async def get_results(
     return api_ok(items, meta=page_meta(limit=limit, offset=offset, total=total))
 
 
-@router.post('/results/read-model/repair')
+
+
+@router.get('/results/statistics', operation_id='getInspectionResultStatistics')
+async def get_result_statistics(
+    batchId: str = '',
+    recipeId: str = '',
+    decision: str = '',
+    defectType: str = '',
+    qrText: str = '',
+    from_: str = Query('', alias='from'),
+    to: str = '',
+    sampleLimit: int = Query(default=120, ge=1, le=1000),
+    svc: ResultQueryService = Depends(service),
+    _session: dict = Depends(require_role('viewer')),
+) -> dict:
+    try:
+        payload = svc.result_statistics(batch_id=batchId, recipe_id=recipeId, decision=decision, defect_type=defectType, qr_text=qrText, from_ts=from_, to_ts=to, sample_limit=sampleLimit)
+    except ReadModelSyncRequiredError as exc:
+        raise HTTPException(status_code=503, detail={'message': str(exc), 'readModelStatus': svc.read_model_status()}) from exc
+    return api_ok(payload)
+
+@router.post('/results/read-model/repair', operation_id='repairInspectionReadModel')
 async def repair_read_model(svc: ResultCommandService = Depends(command_service), session: dict = Depends(require_role('maintainer'))) -> dict:
     try:
         return api_ok(svc.repair_read_model(actor=session), message='read_model_repaired')
@@ -59,17 +80,17 @@ async def repair_read_model(svc: ResultCommandService = Depends(command_service)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.get('/results/read-model/status')
+@router.get('/results/read-model/status', operation_id='getInspectionReadModelStatus')
 async def get_read_model_status(svc: ResultQueryService = Depends(service), _session: dict = Depends(require_role('viewer'))) -> dict:
     return api_ok(svc.read_model_status())
 
 
-@router.get('/results/summary/{batch_id}')
+@router.get('/results/summary/{batch_id}', operation_id='getBatchResultSummary')
 async def get_result_summary(batch_id: str, svc: ResultQueryService = Depends(service), _session: dict = Depends(require_role('viewer'))) -> dict:
     return api_ok(svc.summary(batch_id=batch_id))
 
 
-@router.get('/results/{result_id}')
+@router.get('/results/{result_id}', operation_id='getInspectionResultDetail')
 async def get_result_detail(result_id: str, svc: ResultQueryService = Depends(service), _session: dict = Depends(require_role('viewer'))) -> dict:
     try:
         payload = svc.detail(result_id)

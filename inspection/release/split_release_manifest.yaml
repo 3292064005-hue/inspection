@@ -1,11 +1,14 @@
 schemaVersion: 1
 releaseId: inspection-split-platformio
 generatedFrom: release/version_manifest.yaml
+packageClass: source_delivery
 protocolVersion: v1
 components:
   upperComputerWorkspace:
     version: 0.1.0
     path: upper_computer
+    deliveryKind: source_workspace
+    frontendBundleIncluded: false
     verificationWorkflow: .github/workflows/split_delivery_ci.yml
   stm32StationFirmware:
     firmwareVersion: stm32-station-pio-v1
@@ -21,7 +24,69 @@ compatibilityMatrix:
   esp32CameraFirmwareVersion: esp32s3-camera-pio-v1
   protocolVersion: v1
   status: supported
+runtimeValidation:
+  matrixPath: release/runtime_validation_matrix.yaml
+  matrixSha256: 80854e13e47f706439119059d46f484091d96110f64ea18e6c595131d2bbb7d6
+  requiredEvidenceRoot: release/runtime_validation_evidence
+  gateStatusPath: release/runtime_validation_evidence/gate_status.json
+  gateStatusPresent: true
+  gateVerificationMode: relaxed
+  gateEvaluationStatus: internal_unvalidated
+  gateReleaseEligible: false
+  auditSummaryPath: release/runtime_validation_evidence/audit_summary.json
+  auditSummaryPresent: true
+  auditOverallStatus: internal_unvalidated
+  formalReleaseEligible: false
+  runtimeFormalReleaseEligible: false
+  releaseEvidenceTopics:
+    core:
+    - /inspection/decision
+    - /inspection/image_raw
+    - /inspection/result
+    - /inspection/station/state
+    debug: []
+    diagnostic:
+    - /inspection/diagnostics
+    - /inspection/image_annotated
+    - /inspection/result_raw
+  sourceDeliveryReleaseEligible: true
+  sourceDeliveryStatus: ready_for_source_delivery
+  sourcePackageRequiresFrontendBuild: true
+  scenarios:
+  - id: sim_closed_loop
+    tier: P0
+    required: true
+    requiresHardwareEvidence: false
+    evidencePath: release/runtime_validation_evidence/sim_closed_loop.json
+    evidencePresent: false
+  - id: upper_computer_with_stm32
+    tier: P0
+    required: true
+    requiresHardwareEvidence: true
+    evidencePath: release/runtime_validation_evidence/upper_computer_with_stm32.json
+    evidencePresent: false
+  - id: upper_computer_with_esp32s3
+    tier: P0
+    required: true
+    requiresHardwareEvidence: true
+    evidencePath: release/runtime_validation_evidence/upper_computer_with_esp32s3.json
+    evidencePresent: false
+  - id: full_hardware_closed_loop
+    tier: P0
+    required: true
+    requiresHardwareEvidence: true
+    evidencePath: release/runtime_validation_evidence/full_hardware_closed_loop.json
+    evidencePresent: false
+  frontendBundleIncluded: false
+formalReleaseEligible: false
 notes:
 - Top-level split-delivery CI validates upper-computer workspace, ROS2 Humble runtime,
   firmware compile gates, firmware contract tests, and protocol regressions.
 - Rendered from release/version_manifest.yaml; do not hand-edit the generated manifest.
+- 'This delivery is a source package: the frontend dist bundle is intentionally excluded
+  and must be built in the target workspace before strict gateway release mode is
+  enabled.'
+- sourceDeliveryReleaseEligible=true only means the package is valid as source delivery;
+  runtimeFormalReleaseEligible remains governed by strict runtime evidence.
+- Release validation additionally requires release/runtime_validation_matrix.yaml,
+  checked evidence payloads, and delivery documentation.

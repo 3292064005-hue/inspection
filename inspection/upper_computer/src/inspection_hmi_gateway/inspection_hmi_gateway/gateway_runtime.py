@@ -7,32 +7,33 @@ from typing import Any
 import rclpy
 from rclpy.executors import SingleThreadedExecutor
 
-from inspection_utils.managed_node import ManagedNodeMixin
-from inspection_utils.runtime_node import InspectionRuntimeNode
+from inspection_utils.runtime_common import ExternalServiceRuntimeMixin, StandardRuntimeNode
 
 from .action_contract import EXECUTOR_EVENT_TOPIC
-from .app_facade import GatewayAppFacade
+from .application_service import GatewayApplicationService
 from .ros_bridge import GatewayRosBridge, GatewaySubscriptionHandlers
 from .ws_hub import EventBus
 
 
-class GatewayNode(ManagedNodeMixin, InspectionRuntimeNode):
+class GatewayNode(ExternalServiceRuntimeMixin, StandardRuntimeNode):
     """ROS-facing gateway composition root.
 
     The runtime is partitioned into transport, projection, event fan-out, and
-    application-service layers. The node still preserves historical attributes
-    for tests, but the authoritative application boundary is ``self.app``.
+    application-service layers. The authoritative gateway business boundary is exposed through ``self.app``.
     """
 
     def __init__(self, event_bus: EventBus, *, log_root: str = 'logs/runtime', recipe_root: str = 'config/recipes') -> None:
-        super().__init__('inspection_hmi_gateway_node')
+        super().__init__('inspection_hmi_gateway_server')
         self.event_bus = event_bus
-        self.app = GatewayAppFacade(event_bus=event_bus, log_root=log_root, recipe_root=recipe_root)
+        self.app = GatewayApplicationService(event_bus=event_bus, log_root=log_root, recipe_root=recipe_root)
         self.state = self.app.state
         self.state_store = self.app.state_store
         self.recipe_store = self.app.recipe_store
         self.result_store = self.app.result_store
         self.projector = self.app.projector
+        self.control_plane = self.app.control_plane
+        self.query_plane = self.app.query_plane
+        self.recipe_plane = self.app.recipe_plane
         self._executor_enabled = str(os.environ.get('INSPECTION_ACTION_EXECUTOR_ENABLED', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
         self.ros_bridge = GatewayRosBridge(
             self,
@@ -51,17 +52,7 @@ class GatewayNode(ManagedNodeMixin, InspectionRuntimeNode):
         )
         self.app.bind_ros_bridge(self.ros_bridge)
         self.refresh_recipes()
-        self.setup_managed_runtime(node_name='inspection_hmi_gateway_node')
-
-    def on_configure(self) -> tuple[bool, str]:
-        self.refresh_recipes()
-        return True, 'configured'
-
-    def on_activate(self) -> tuple[bool, str]:
-        return True, 'active'
-
-    def on_deactivate(self) -> tuple[bool, str]:
-        return True, 'inactive'
+        self.setup_external_runtime(node_name='inspection_hmi_gateway_server', initial_state='ACTIVE')
 
     def register_action_jobs(self, *, submit: Any, get_job: Any, cancel: Any) -> None:
         self.ros_bridge.register_action_jobs(submit=submit, get_job=get_job, cancel=cancel)
@@ -146,6 +137,8 @@ class GatewayRuntime:
         thread = self.thread
         if executor and node:
             executor.remove_node(node)
+            if hasattr(node, 'mark_external_runtime_state'):
+                node.mark_external_runtime_state('FINALIZED')
             node.destroy_node()
         if executor:
             executor.shutdown()
@@ -183,7 +176,8 @@ class GatewayRuntime:
         received_executor_updates = int(ros_bridge_snapshot.get('receivedExecutorUpdates', 0)) if isinstance(ros_bridge_snapshot, dict) else 0
         action_executor_expected = str(os.environ.get('INSPECTION_ACTION_EXECUTOR_ENABLED', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
         native_action_client_enabled = str(os.environ.get('INSPECTION_NATIVE_ACTION_CLIENT_ENABLED', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
-        action_transport_mode = 'native_action' if native_action_client_enabled else ('executor_bridge' if action_executor_expected else 'local_runtime')
+        local_runtime_enabled = str(os.environ.get('INSPECTION_ACTION_LOCAL_RUNTIME_ENABLED', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
+        action_transport_mode = 'native_action' if native_action_client_enabled else ('executor_bridge' if action_executor_expected else ('local_runtime' if local_runtime_enabled else 'detached'))
         executor_update_channel_bound = EXECUTOR_EVENT_TOPIC in subscriptions
         transport_ready = bool(node_ready and executor_ready and thread_alive and ros_bridge is not None and (not action_executor_expected or executor_update_channel_bound))
         transport_observed = bool(transport_ready and (not action_executor_expected or received_executor_updates > 0))
@@ -191,6 +185,7 @@ class GatewayRuntime:
             'transportMode': action_transport_mode,
             'actionExecutorExpected': action_executor_expected,
             'nativeActionClientEnabled': native_action_client_enabled,
+            'localRuntimeEnabled': local_runtime_enabled,
             'rosBridgeBound': ros_bridge is not None,
             'executorUpdateChannelBound': executor_update_channel_bound,
             'receivedExecutorUpdates': received_executor_updates,

@@ -10,7 +10,7 @@ repository can focus on serving query operations and delegating rebuild work.
 from dataclasses import dataclass
 from typing import Any
 
-from inspection_utils.read_model_store import ReadModelStore
+from inspection_utils.model_common import ReadModelStore
 
 from .read_model_policy import READ_MODEL_MODE_LEGACY, READ_MODEL_MODE_REPAIR, ReadModelPolicy
 

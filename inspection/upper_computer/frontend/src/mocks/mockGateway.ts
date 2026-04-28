@@ -1,4 +1,7 @@
+import { mockActionCatalog } from '@/mocks/generated/actionCatalog';
 import type {
+  ActionCapabilityMatrix,
+  ActionCatalogEntry,
   CameraFrame,
   CountStats,
   AuthSession,
@@ -9,9 +12,12 @@ import type {
   FaultEvent,
   HeartbeatStatus,
   InspectionResult,
+  ObservedInspectionResult,
   ReadModelStatus,
   RecipeProfile,
   ResultQuery,
+  ResultStatisticsQuery,
+  ResultStatisticsSnapshot,
   StationPhase,
   StationStateSnapshot,
   TraceBundle,
@@ -237,7 +243,7 @@ export class MockGateway implements HmiGateway {
       capturedAt: nowIso(),
       annotated: true,
       semantic: 'LATEST_RESULT_FRAME',
-      sourceEvent: 'inspection.result.created',
+      sourceEvent: 'inspection.result.observed',
       description: '最近一次演示结果对应的图像快照。',
     });
     this.startHeartbeat();
@@ -400,6 +406,60 @@ export class MockGateway implements HmiGateway {
     return results;
   }
 
+
+  async getResultStatistics(query?: ResultStatisticsQuery): Promise<ResultStatisticsSnapshot> {
+    const results = await this.getResults(query);
+    const ordered = [...results].sort((left, right) => String(right.timestamp).localeCompare(String(left.timestamp)));
+    const sampleLimit = Math.max(1, Number(query?.sampleLimit ?? 120));
+    const cycleValues = ordered.map((item) => item.cycleMs).filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+    const percentileIndex = cycleValues.length ? Math.min(cycleValues.length - 1, Math.max(0, Math.ceil(0.95 * cycleValues.length) - 1)) : 0;
+    const okCount = ordered.filter((item) => item.decision === 'OK').length;
+    const ngCount = ordered.filter((item) => item.decision === 'NG').length;
+    const recheckCount = ordered.filter((item) => item.decision === 'RECHECK').length;
+    const defectCounts = new Map<string, number>();
+    const recipeCounts = new Map<string, { recipeName: string; total: number; okCount: number; ngCount: number; recheckCount: number }>();
+    ordered.forEach((item) => {
+      const defect = item.decision === 'OK' ? '无缺陷' : item.defectType ?? '未知';
+      defectCounts.set(defect, (defectCounts.get(defect) ?? 0) + 1);
+      const current = recipeCounts.get(item.recipeId) ?? { recipeName: item.recipeName, total: 0, okCount: 0, ngCount: 0, recheckCount: 0 };
+      current.total += 1;
+      if (item.decision === 'OK') current.okCount += 1;
+      else if (item.decision === 'NG') current.ngCount += 1;
+      else current.recheckCount += 1;
+      recipeCounts.set(item.recipeId, current);
+    });
+    return {
+      filters: {
+        batchId: query?.batchId,
+        recipeId: query?.recipeId,
+        decision: query?.decision || undefined,
+        defectType: query?.defectType,
+        qrText: query?.qrText,
+        from: query?.from,
+        to: query?.to,
+      },
+      summary: {
+        total: ordered.length,
+        okCount,
+        ngCount,
+        recheckCount,
+        yieldRate: ordered.length ? Number((okCount / ordered.length).toFixed(4)) : 0,
+        avgCycleMs: ordered.length ? Number((ordered.reduce((sum, item) => sum + item.cycleMs, 0) / ordered.length).toFixed(3)) : 0,
+        p95CycleMs: cycleValues.length ? Number(cycleValues[percentileIndex].toFixed(3)) : 0,
+        sampleCount: Math.min(ordered.length, sampleLimit),
+      },
+      decisionBreakdown: [
+        { decision: 'OK', count: okCount },
+        { decision: 'NG', count: ngCount },
+        { decision: 'RECHECK', count: recheckCount },
+      ].filter((item) => item.count > 0),
+      defectBreakdown: Array.from(defectCounts.entries()).map(([name, count]) => ({ name, count })).sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
+      recipeBreakdown: Array.from(recipeCounts.entries()).map(([recipeId, value]) => ({ recipeId, recipeName: value.recipeName, total: value.total, okCount: value.okCount, ngCount: value.ngCount, recheckCount: value.recheckCount, yieldRate: value.total ? Number((value.okCount / value.total).toFixed(4)) : 0 })).sort((left, right) => right.total - left.total || left.recipeId.localeCompare(right.recipeId)),
+      cycleTrend: ordered.slice(0, sampleLimit).reverse().map((item) => ({ id: item.id, timestamp: item.timestamp, cycleMs: item.cycleMs, decision: item.decision, recipeId: item.recipeId, recipeName: item.recipeName })),
+      readModelStatus: { ...this.state.readModelStatus },
+    };
+  }
+
   async getResultDetail(resultId: string): Promise<InspectionResult> {
     const item = this.state.results.find((entry) => entry.id === resultId);
     if (!item) throw new Error(`Result not found: ${resultId}`);
@@ -474,7 +534,7 @@ export class MockGateway implements HmiGateway {
         capturedAt: nowIso(),
         annotated: true,
         semantic: 'LATEST_RESULT_FRAME',
-        sourceEvent: 'inspection.result.created',
+        sourceEvent: 'inspection.result.observed',
         description: '最近一次演示结果对应的图像快照。',
       };
       this.emit('camera.frame', frame);
@@ -585,10 +645,12 @@ export class MockGateway implements HmiGateway {
         capturedAt: nowIso(),
         annotated: true,
         semantic: 'LATEST_RESULT_FRAME',
-        sourceEvent: 'inspection.result.created',
+        sourceEvent: 'inspection.result.observed',
         description: '最近一次演示结果对应的图像快照。',
       });
-      this.emit('inspection.result.created', result);
+      const observed: ObservedInspectionResult = { ...result, decision: undefined, stage: 'OBSERVED' };
+      this.emit('inspection.result.observed', observed);
+      this.emit('inspection.result.finalized', result);
       this.updateStats(result);
       this.maybeRaiseFault();
       this.patchSnapshot({
@@ -651,6 +713,18 @@ export class MockGateway implements HmiGateway {
         totalMs: cycleMs,
       },
     };
+  }
+
+
+  async getActionCatalog(includeNonProduction = false): Promise<ActionCatalogEntry[]> {
+    return mockActionCatalog
+      .filter((item) => includeNonProduction || (item.capability.visibility === 'visible' && item.governance.tier === 'official'))
+      .map((item) => ({ ...item, requiredPayload: [...item.requiredPayload] }));
+  }
+
+  async getActionCapabilityMatrix(): Promise<ActionCapabilityMatrix> {
+    const items = await this.getActionCatalog(true);
+    return Object.fromEntries(items.map((item) => [item.kind, item]));
   }
 
 

@@ -9,7 +9,7 @@ transitions so :mod:`station_bridge_node` can stay a thin ROS shell.
 import json
 from typing import Any
 
-from inspection_utils.logging_tools import safe_json_loads
+from inspection_utils.logging_common import safe_json_loads
 
 from .bridge_base import BridgeSignal
 from .runtime_support import BridgeRuntimeSupport
@@ -38,6 +38,7 @@ class BridgeSessionCoordinator:
         if not self.node.is_active():
             return
         request = safe_json_loads(raw_data)
+        request.setdefault('protocol_version', getattr(self.node, 'protocol_version_label', 'v1'))
         self.node.batch_id = str(request.get('batch_id', 'BATCH_DEMO'))
         self.node.item_id = int(request.get('item_id', self.node.item_id + 1))
         self.node.trace_id = str(request.get('trace_id', f'{self.node.batch_id}-{self.node.item_id:05d}'))
@@ -46,7 +47,7 @@ class BridgeSessionCoordinator:
         self.publish_station('FEEDING', gate_busy=True, detail={'command': 'feed_one', 'seq': seq, 'generation': self.node.session.generation})
         self.node.adapter.send_feed(seq, json.dumps(request, ensure_ascii=False, sort_keys=True).encode('utf-8'))
 
-    def on_sort_cmd(self, msg: Any) -> None:
+    def on_sort_request(self, msg: Any) -> None:
         if not self.node.is_active():
             return
         self.node.batch_id = msg.batch_id
@@ -80,6 +81,7 @@ class BridgeSessionCoordinator:
         }
         self.publish_station('SORTING', sorter_busy=True, detail=detail)
         payload = {
+            'protocol_version': getattr(self.node, 'protocol_version_label', 'v1'),
             'decision': msg.decision,
             'action_code': msg.action_code,
             'target_bin': msg.target_bin,
@@ -94,6 +96,7 @@ class BridgeSessionCoordinator:
         if self.node.lifecycle_state == 'FINALIZED':
             return
         payload = safe_json_loads(raw_data)
+        payload.setdefault('protocol_version', getattr(self.node, 'protocol_version_label', 'v1'))
         self.node.trace_id = str(payload.get('trace_id', self.node.trace_id))
         seq = self.node._next_seq()
         self.node.command_center.register(seq, 'reset', self.node.trace_id, self.node.item_id, self.node.batch_id)

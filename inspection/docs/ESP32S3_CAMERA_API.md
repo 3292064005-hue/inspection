@@ -35,3 +35,35 @@
 - `INSPECTION_HTTP_AUTH_TOKEN`
 - `INSPECTION_HTTP_AUTH_HEADER`
 - `INSPECTION_ALLOW_ANONYMOUS_HTTP`
+
+
+## 请求示例
+### 鉴权 snapshot
+```bash
+curl -H 'X-Inspection-Token: <token>'   http://<camera-host>/api/v1/camera/snapshot   --output snapshot.jpg
+```
+
+### health
+```bash
+curl -H 'X-Inspection-Token: <token>'   http://<camera-host>/api/v1/camera/health
+```
+
+## 失败响应示例
+### 401
+当固件启用了 HTTP 鉴权、请求未提供 `X-Inspection-Token`，或提供了错误 token 时，当前实现统一返回 `401`，并带 `WWW-Authenticate: InspectionToken` 头；返回体会区分 `missing_token` 与 `invalid_token`，例如：
+```json
+{"authorized":false,"reason":"missing_token"}
+```
+或：
+```json
+{"authorized":false,"reason":"invalid_token"}
+```
+
+### 403
+当前固件实现不使用 `403` 表示 token 缺失或错误；若未来增加基于角色或模式的访问拒绝，再单独定义 `403` 语义。
+
+### 503
+当拍照失败、相机重初始化失败或设备处于降级状态时，`snapshot` 可返回 503，例如：
+```json
+{"error":"capture_failed_reinitialized","degradedReason":"camera_reinitialized"}
+```
